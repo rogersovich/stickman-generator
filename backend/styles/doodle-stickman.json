@@ -1,0 +1,10 @@
+{
+  "id": "doodle-stickman",
+  "name": "Doodle Stickman Explainer",
+  "intro": "Hand-drawn doodle cartoon illustration in the style of an educational YouTube explainer video.",
+  "style": "stick figure characters with round white heads and simple dot eyes, thick wobbly black marker outlines, flat colors with no shading, limited palette that fits the scene with one bright yellow accent. Plain simple background that fits the setting. Bold black radiating action lines around the main subject to emphasize it. A thick yellow arrow with a black outline pointing at the main subject.",
+  "text": "bold black hand-lettered title \"{title_text}\" centered at the top.",
+  "composition": "simple and clean, the main subject is the focus, thumbnail-friendly.",
+  "llm_hint": "Characters are simple stick figures with round white heads, dot eyes and expressive mouths (surprised, curious, happy). Keep each scene simple enough for a doodle: one clear main subject, a plain background.",
+  "example_scene_description": "An ancient sunken city on the ocean floor on the right side of the frame, made of crumbling stone temples, broken columns, arched gateways and a small step pyramid, partly covered in seaweed and coral, with a few small fish swimming between the ruins. On the left, three stick figure scuba divers float underwater, each wearing a round diving mask, a yellow oxygen tank on their back and black fins, holding flashlights pointed at the city. The diver in the front is turned toward the city with a surprised face: wide eyes behind the mask and an open red mouth, with small air bubbles rising from the mouth."
+}

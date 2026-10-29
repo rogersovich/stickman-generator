@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --color-canvas: #0e1015;
+  --color-surface-panel: #161920;
+  --color-surface-card: #1e222b;
+  --color-border-subtle: #292e3b;
+  --color-border-active: #3d4455;
+  --color-accent-amber: #f59e0b;
+}
+
+/* Custom Scrollbar for Studio Workbench */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0e1015;
+}
+::-webkit-scrollbar-thumb {
+  background: #292e3b;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3d4455;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 select-none;
+}
+@utility btn-primary {
+  @apply btn bg-amber-500 text-slate-950 font-semibold shadow-xs hover:bg-amber-400 active:bg-amber-600;
+}
+@utility btn-ghost {
+  @apply btn border border-[#292e3b] bg-[#1e222b] text-slate-200 shadow-2xs hover:border-[#3d4455] hover:bg-[#252b36] hover:text-white;
+}
+@utility btn-subtle {
+  @apply btn text-slate-400 hover:bg-[#1e222b] hover:text-slate-200;
+}
+@utility btn-danger {
+  @apply btn border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300;
+}
+@utility input {
+  @apply w-full rounded-lg border border-[#292e3b] bg-[#161920] px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition duration-150 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/40;
+}
+@utility label {
+  @apply mb-1.5 block text-xs font-semibold tracking-wider text-slate-400 uppercase;
+}
+@utility panel {
+  @apply rounded-xl border border-[#292e3b] bg-[#161920];
+}
+@utility card {
+  @apply rounded-xl border border-[#292e3b] bg-[#1e222b];
+}

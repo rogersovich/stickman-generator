@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --bg: #18181b; --card: #27272a; --line: #3f3f46; --text: #f4f4f5; --muted: #a1a1aa;
+        --yellow: #facc15; --green: #22c55e; --red: #f87171; --amber: #fbbf24; --blue: #60a5fa;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 14px; font: 13px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; gap: 10px; min-height: 100vh; }
+      h1 { font-size: 14px; margin: 0; }
+      button { padding: 8px; border: 0; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+      .row { display: flex; gap: 8px; }
+      .row > * { flex: 1; }
+      .primary { background: var(--yellow); color: #18181b; }
+      .ghost { background: var(--line); color: var(--text); }
+      .on { background: var(--green); color: #052e16; }
+      .small { padding: 4px 8px; font-size: 11px; font-weight: 500; flex: 0 0 auto; }
+      .card { background: var(--card); border-radius: 10px; padding: 10px 12px; }
+      .state { display: flex; align-items: flex-start; gap: 8px; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex: 0 0 auto; background: var(--muted); }
+      .dot.job { background: var(--yellow); animation: pulse 1.2s infinite; }
+      .dot.waiting, .dot.delay { background: var(--blue); }
+      .dot.break { background: var(--amber); }
+      .dot.problem { background: var(--red); }
+      @keyframes pulse { 50% { opacity: 0.35; } }
+      .label { font-weight: 600; word-break: break-word; }
+      .meta { color: var(--muted); font-size: 12px; margin-top: 2px; word-break: break-word; }
+      .job { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
+      .job dt { color: var(--muted); }
+      .job dd { margin: 0; word-break: break-word; }
+      .log-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+      .log-head h2 { font-size: 11px; margin: 0; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; flex: 1; }
+      #log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1; min-height: 120px; }
+      #log li { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 6px 8px; border-radius: 6px; background: var(--card); font-size: 12px; }
+      #log time { color: var(--muted); font-variant-numeric: tabular-nums; }
+      #log .text { white-space: pre-wrap; word-break: break-word; }
+      #log .ok .text { color: #86efac; }
+      #log .warn .text { color: var(--amber); }
+      #log .error .text { color: var(--red); }
+      #log .empty { color: var(--muted); background: none; display: block; }
+      details { color: var(--muted); font-size: 12px; }
+      summary { cursor: pointer; }
+      label { display: block; font-size: 11px; color: var(--muted); margin: 8px 0 4px; text-transform: uppercase; }
+      input { width: 100%; padding: 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+      .hint { color: var(--muted); font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <h1>● Stickman Flow Worker</h1>
+
+    <div class="row">
+      <button id="openApp" class="primary">Buka App</button>
+      <button id="openSettings" class="ghost">⚙ Pengaturan</button>
+    </div>
+    <button id="toggle" class="ghost">Worker: OFF</button>
+
+    <div class="card">
+      <div class="state">
+        <span id="dot" class="dot"></span>
+        <div>
+          <div id="stateLabel" class="label">Worker OFF</div>
+          <div id="stateMeta" class="meta"></div>
+        </div>
+      </div>
+      <dl id="job" class="job" hidden>
+        <dt>Project</dt><dd id="jobProject"></dd>
+        <dt>Scene</dt><dd id="jobScene"></dd>
+        <dt>Jenis</dt><dd id="jobKind"></dd>
+        <dt>Tahap</dt><dd id="jobStep"></dd>
+        <dt>Total</dt><dd id="jobTotal"></dd>
+      </dl>
+    </div>
+
+    <div class="log-head">
+      <h2>Log</h2>
+      <button id="copyLog" class="ghost small">Copy</button>
+      <button id="clearLog" class="ghost small">Clear</button>
+    </div>
+    <ul id="log"></ul>
+
+    <details>
+      <summary>Koneksi</summary>
+      <label for="backendUrl">Backend URL</label>
+      <input id="backendUrl" />
+      <label for="appUrl">App URL</label>
+      <input id="appUrl" />
+    </details>
+    <p class="hint">Jeda, kecepatan ketik, resolusi, istirahat &amp; batas sesi diatur di ⚙ Pengaturan (web app).</p>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

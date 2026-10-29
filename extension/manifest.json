@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Stickman Flow Worker",
+  "version": "0.1.0",
+  "description": "Generate images in Google Flow from local Stickman Generator jobs and send them back to localhost.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "sidePanel",
+    "debugger",
+    "downloads",
+    "notifications"
+  ],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://flow.google.com/*",
+    "https://labs.google/*",
+    "https://*.googleusercontent.com/*",
+    "https://storage.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Stickman Flow Worker",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://flow.google.com/*",
+        "https://labs.google/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
