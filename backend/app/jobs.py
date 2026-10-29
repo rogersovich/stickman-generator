@@ -73,7 +73,10 @@ def next_job() -> dict | None:
             if _expire_stale(p):
                 _refresh_status(p)
                 storage.save(p)
-        if any(s.image_status == "generating" for p in active for s in p.scenes):
+        cfg = settings.load()
+        max_concurrency = cfg.max_concurrency if getattr(cfg, "concurrent_generate", True) else 1
+        generating_count = sum(1 for p in active for s in p.scenes if s.image_status == "generating")
+        if generating_count >= max_concurrency:
             return None
         for p in sorted(active, key=lambda p: p.created_at):
             for i, s in enumerate(p.scenes):
@@ -83,7 +86,6 @@ def next_job() -> dict | None:
                 if s.image_status == "pending":
                     s.image_status, s.error, s.started_at = "generating", None, now_iso()
                     storage.save(p)
-                    cfg = settings.load()
                     job = {
                         "project_id": p.id,
                         "project_title": p.title,

@@ -46,10 +46,14 @@ class AppSettings(BaseModel):
     delay_between_redownloads: Range = Field(
         default_factory=lambda: Range(min=config.REDOWNLOAD_DELAY_MIN, max=config.REDOWNLOAD_DELAY_MAX)
     )
-    think_before_typing: Range = _range(1.2, 3.5)
-    char_delay_ms: Range = _range(18, 70)
-    before_send: Range = _range(0.8, 2.5)
-    typing_mode: Literal["human", "fast"] = "human"
+    think_before_typing: Range = _range(0, 0)
+    char_delay_ms: Range = _range(0, 0)
+    before_send: Range = _range(0.3, 0.8)
+    typing_mode: Literal["human", "fast"] = "fast"
+
+    # concurrency (simultaneous generate across tabs)
+    concurrent_generate: bool = True
+    max_concurrency: int = Field(3, ge=1, le=10)
 
     # breaks & limits (0 = off)
     break_every_images: int = Field(0, ge=0, le=500)

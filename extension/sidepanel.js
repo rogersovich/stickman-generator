@@ -76,6 +76,7 @@ function render() {
 
 $("openApp").onclick = () => chrome.tabs.create({ url: state.appUrl });
 $("openSettings").onclick = () => chrome.tabs.create({ url: `${state.appUrl}/#/settings` });
+$("openFlowTab").onclick = () => chrome.tabs.create({ url: "https://flow.google.com/" });
 
 $("toggle").onclick = async () => {
   const s = await load();

@@ -22,12 +22,15 @@ const TIMING = {
   imageStableFor: 4000,
 };
 
+// Unique tab worker identifier for multi-tab concurrent generation
+const TAB_ID = Math.random().toString(36).slice(2, 6).toUpperCase();
+
 // Used when the backend can't be reached; mirrors backend/app/settings.py defaults.
 const DEFAULT_WORKER_SETTINGS = {
-  think_before_typing: { min: 1.2, max: 3.5 },
-  char_delay_ms: { min: 18, max: 70 },
-  before_send: { min: 0.8, max: 2.5 },
-  typing_mode: "human",
+  think_before_typing: { min: 0, max: 0 },
+  char_delay_ms: { min: 0, max: 0 },
+  before_send: { min: 0.3, max: 0.8 },
+  typing_mode: "fast",
   break_every_images: 0,
   break_minutes: { min: 3, max: 5 },
   session_limit_images: 0,
@@ -89,10 +92,11 @@ const LOG_MAX = 150;
 let logChain = Promise.resolve();
 
 function log(text, level = "info") {
-  console.log(`[stickman-worker] ${level}:`, text);
+  const fullText = text.startsWith("[Tab #") ? text : `[Tab #${TAB_ID}] ${text}`;
+  console.log(`[stickman-worker] ${level}:`, fullText);
   logChain = logChain.then(async () => {
     const { log: entries = [] } = await chrome.storage.local.get("log");
-    entries.push({ t: Date.now(), level, text });
+    entries.push({ t: Date.now(), level, text: fullText });
     await chrome.storage.local.set({ log: entries.slice(-LOG_MAX) });
   });
 }
@@ -256,6 +260,16 @@ async function submitPrompt(input) {
     if (await waitFor(sent, 6000)) return;
   }
   throw new Error(`prompt tidak terkirim setelah 2x klik. tombol: ${describe(button)}`);
+}
+
+async function pastePrompt(el, text) {
+  // Typing Enter would submit, so line breaks become spaces ("Create Image:" stays first).
+  text = text.replace(/\s*\n\s*/g, " ");
+  await trustedClick(el);
+  await sleep(rand(40, 100));
+  await send({ type: "trustedClear" });
+  await sleep(rand(40, 100));
+  await send({ type: "trustedType", text });
 }
 
 async function typeLikeHuman(el, text, mode, charDelay) {
@@ -502,11 +516,16 @@ async function runJob(job, cfg) {
   const input = findInput();
   if (!input) throw new Error("kolom prompt Flow tidak ditemukan");
 
-  await sleep(secRange(cfg.think_before_typing));
-  step(cfg.typing_mode === "fast" ? "menempel prompt…" : "mengetik prompt…");
-  await typeLikeHuman(input, job.prompt, cfg.typing_mode, cfg.char_delay_ms);
+  // Tempel prompt instan via paste (tanpa jeda berpikir sebelum ketik)
+  step("menempel prompt (paste instan)…");
+  if (cfg.typing_mode === "human" && cfg.char_delay_ms?.max > 0) {
+    await typeLikeHuman(input, job.prompt, cfg.typing_mode, cfg.char_delay_ms);
+  } else {
+    await pastePrompt(input, job.prompt);
+  }
 
-  await sleep(secRange(cfg.before_send));
+  const beforeSendWait = cfg.before_send ? secRange(cfg.before_send) : 0.3;
+  await sleep(Math.max(150, Math.min(beforeSendWait * 1000, 800)));
   checkStopped();
   const before = imageSrcs();
   step("mengirim prompt…");

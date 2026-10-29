@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Clock, Cpu, HardDrive, Info, Layers, Lock, Save, Sliders, Volume2 } from "lucide-react";
+import { Check, Clock, Cpu, HardDrive, Info, Layers, Lock, Save, Sliders, Volume2, Zap } from "lucide-react";
 import { api } from "./api.js";
 import { ChoiceCards, Select, Toggle } from "./ui.jsx";
 
@@ -7,35 +7,29 @@ import { ChoiceCards, Select, Toggle } from "./ui.jsx";
 const PRESETS = {
   santai: {
     label: "Santai",
-    desc: "Paling mirip manusia, paling aman dari rate limit",
+    desc: "Paling mirip manusia, jeda panjang dan aman",
     values: {
       delay_between_images: { min: 45, max: 120 },
       delay_between_redownloads: { min: 6, max: 15 },
-      think_before_typing: { min: 2, max: 5 },
-      char_delay_ms: { min: 35, max: 110 },
-      before_send: { min: 1.5, max: 4 },
+      before_send: { min: 0.8, max: 2.0 },
     },
   },
   normal: {
     label: "Normal",
     desc: "Seimbang dan optimal untuk pengerjaan harian (default)",
     values: {
-      delay_between_images: { min: 20, max: 60 },
+      delay_between_images: { min: 15, max: 40 },
       delay_between_redownloads: { min: 3, max: 8 },
-      think_before_typing: { min: 1.2, max: 3.5 },
-      char_delay_ms: { min: 18, max: 70 },
-      before_send: { min: 0.8, max: 2.5 },
+      before_send: { min: 0.4, max: 1.0 },
     },
   },
   cepat: {
-    label: "Cepat",
-    desc: "Sangat cepat, risiko kena batas rate limit Flow lebih tinggi",
+    label: "Cepat (Turbo)",
+    desc: "Sangat cepat dengan paste instan, jeda antar gambar minimal",
     values: {
-      delay_between_images: { min: 8, max: 20 },
-      delay_between_redownloads: { min: 2, max: 4 },
-      think_before_typing: { min: 0.5, max: 1.5 },
-      char_delay_ms: { min: 8, max: 30 },
-      before_send: { min: 0.4, max: 1.2 },
+      delay_between_images: { min: 5, max: 15 },
+      delay_between_redownloads: { min: 1.5, max: 3 },
+      before_send: { min: 0.2, max: 0.5 },
     },
   },
 };
@@ -162,7 +156,7 @@ export default function Settings() {
         </div>
       </Section>
 
-      <Section title="Tempo Kerja Worker (Google Flow)" desc="Mengatur kecepatan Chrome extension berinteraksi dengan tab Google Flow untuk meniru interaksi manusia." icon={Sliders}>
+      <Section title="Tempo Kerja Worker (Google Flow)" desc="Mengatur kecepatan Chrome extension berinteraksi dengan Google Flow. Menggunakan metode paste instan agar proses cepat dan efisien." icon={Sliders}>
         <ChoiceCards
           className="sm:grid-cols-4"
           value={settings.tempo_preset}
@@ -173,31 +167,56 @@ export default function Settings() {
           ]}
         />
         <div className="grid gap-4 sm:grid-cols-2 pt-2">
-          <Field label="Jeda Antar Gambar (detik)">
+          <Field label="Jeda Antar Gambar (detik)" hint="Waktu jeda setelah gambar selesai sebelum mengambil job berikutnya.">
             <RangeInput value={settings.delay_between_images} onChange={pacing("delay_between_images")} unit="dtk" step={1} />
           </Field>
-          <Field label="Jeda Antar Ambil Ulang 2K (detik)">
+          <Field label="Jeda Antar Ambil Ulang 2K (detik)" hint="Jeda saat proses unduh ulang file 2K full-res.">
             <RangeInput value={settings.delay_between_redownloads} onChange={pacing("delay_between_redownloads")} unit="dtk" step={1} />
           </Field>
-          <Field label="Jeda Berpikir Sebelum Ketik">
-            <RangeInput value={settings.think_before_typing} onChange={pacing("think_before_typing")} unit="dtk" />
-          </Field>
-          <Field label="Jeda Sebelum Klik Kirim">
-            <RangeInput value={settings.before_send} onChange={pacing("before_send")} unit="dtk" />
-          </Field>
-          <Field label="Kecepatan Ketik per Karakter (ms)" hint="Berlaku jika mode ketik per huruf diaktifkan.">
-            <RangeInput value={settings.char_delay_ms} onChange={pacing("char_delay_ms")} unit="ms" step={1} />
+          <Field label="Jeda Sebelum Klik Kirim (detik)" hint="Buffer sesaat setelah paste agar input Flow stabil sebelum send.">
+            <RangeInput value={settings.before_send} onChange={pacing("before_send")} unit="dtk" step={0.1} />
           </Field>
           <Field label="Metode Pengetikan Prompt">
-            <Select
-              value={settings.typing_mode}
-              onChange={(v) => update({ typing_mode: v })}
-              options={[
-                { value: "human", label: "Per Huruf (Humanlike)", desc: "Meniru ketukan keyboard manusia" },
-                { value: "fast", label: "Tempel Sekaligus (Fast)", desc: "Langsung paste ke kolom input Flow" },
-              ]}
-            />
+            <div className="flex h-10 items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 text-xs text-amber-200">
+              <Zap size={14} className="text-amber-400 shrink-0" />
+              <span>
+                <strong className="text-amber-300">Paste Instan (Aktif)</strong>: Prompt ditempel langsung seketika tanpa jeda ketik per huruf &amp; tanpa jeda berpikir.
+              </span>
+            </div>
           </Field>
+        </div>
+      </Section>
+
+      <Section title="Concurrent Generation (Multi-Worker)" desc="Memproses beberapa gambar secara bersamaan di Google Flow untuk memangkas total durasi antrian." icon={Layers}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Status Concurrent Generate" hint="Aktifkan agar antrian backend membolehkan beberapa tab Flow generate bersamaan.">
+            <div className="flex items-center gap-3 pt-1">
+              <Toggle
+                checked={settings.concurrent_generate ?? true}
+                onChange={(checked) => update({ concurrent_generate: checked })}
+              />
+              <span className="text-sm font-semibold text-slate-200">
+                {(settings.concurrent_generate ?? true) ? "Aktif (Multi-tab Paralel)" : "Nonaktif (1 Gambar Saja)"}
+              </span>
+            </div>
+          </Field>
+          <Field label="Slot Antrian Simultan (Max Concurrency)" hint="Jumlah maksimal gambar yang diproses bersamaan (default 3).">
+            <div className="relative">
+              <input
+                className="input font-mono font-bold text-amber-300"
+                type="number"
+                min={1}
+                max={10}
+                value={settings.max_concurrency ?? 3}
+                disabled={!(settings.concurrent_generate ?? true)}
+                onChange={field("max_concurrency", Number)}
+              />
+              <span className="absolute right-3.5 top-2.5 font-mono text-xs text-slate-400">slot simultan</span>
+            </div>
+          </Field>
+        </div>
+        <div className="rounded-lg border border-[#292e3b] bg-[#12141a] p-3 text-xs text-slate-400 leading-relaxed">
+          <span className="text-amber-400 font-semibold">Cara Pakai:</span> Buka <b>{settings.max_concurrency ?? 3} tab Google Flow</b> di browser Chrome kamu dengan project yang sama. Tiap tab otomatis mengambil adegan berikutnya dan meng-generate gambar secara simultan!
         </div>
       </Section>
 

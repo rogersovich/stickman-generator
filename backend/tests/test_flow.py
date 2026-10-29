@@ -317,3 +317,51 @@ def test_rewrite_retries_once_when_length_is_off(monkeypatch):
     monkeypatch.setattr(story, "_chat", lambda model, messages, temperature=0.6: replies.pop(0))
     opts, _ = story.rewrite_narration(**REWRITE_ARGS, mode="reword", model="m")
     assert all(len(o.split()) == 18 for o in opts) and not replies
+
+
+def test_concurrent_generation_queue(client):
+    md = """# Concurrency Test
+## Scene 1
+Beat narasi: N1
+```
+CREATE IMAGE
+prompt 1
+```
+## Scene 2
+Beat narasi: N2
+```
+CREATE IMAGE
+prompt 2
+```
+## Scene 3
+Beat narasi: N3
+```
+CREATE IMAGE
+prompt 3
+```
+## Scene 4
+Beat narasi: N4
+```
+CREATE IMAGE
+prompt 4
+```
+"""
+    p = client.post("/api/projects/import-markdown", json={"markdown": md, "auto_confirm": True}).json()
+    pid = p["id"]
+
+    # Concurrency default is 3: first 3 jobs should be dispatched
+    j1 = client.get("/api/jobs/next")
+    assert j1.status_code == 200 and j1.json()["scene_index"] == 0
+    j2 = client.get("/api/jobs/next")
+    assert j2.status_code == 200 and j2.json()["scene_index"] == 1
+    j3 = client.get("/api/jobs/next")
+    assert j3.status_code == 200 and j3.json()["scene_index"] == 2
+
+    # 4th job should be blocked because concurrency limit of 3 is reached
+    assert client.get("/api/jobs/next").status_code == 204
+
+    # Finish job 0 -> releases slot -> next call should return scene 3
+    client.post(f"/api/jobs/{pid}/0/result", json={"image_base64": PNG, "mime": "image/png"})
+    j4 = client.get("/api/jobs/next")
+    assert j4.status_code == 200 and j4.json()["scene_index"] == 3
+
