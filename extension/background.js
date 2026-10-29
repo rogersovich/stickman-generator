@@ -102,18 +102,21 @@ async function trustedClear(_msg, tabId) {
 // The content script arms an expectation, clicks Download in Flow's menu, and we rename the next
 // download into Downloads/stickman-flow/<project>/ and report its absolute path once complete.
 
-let expected = null; // { filename, armedAt, id }
+let expectedQueue = []; // [{ filename, armedAt, id }]
 
 async function expectDownload({ filename }) {
-  expected = { filename, armedAt: Date.now(), id: null };
+  expectedQueue.push({ filename, armedAt: Date.now(), id: null });
   return true;
 }
 
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-  if (expected && expected.id === null && Date.now() - expected.armedAt < 120000) {
-    expected.id = item.id;
+  const now = Date.now();
+  // Find the first waiting expectation within 120s
+  const exp = expectedQueue.find((e) => e.id === null && now - e.armedAt < 120000);
+  if (exp) {
+    exp.id = item.id;
     const ext = (item.filename.match(/\.(png|jpe?g|webp)$/i) || [".png"])[0].toLowerCase();
-    suggest({ filename: `${expected.filename}${ext}`, conflictAction: "overwrite" });
+    suggest({ filename: `${exp.filename}${ext}`, conflictAction: "overwrite" });
   } else {
     suggest();
   }
@@ -122,26 +125,30 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
 async function awaitDownload({ timeoutMs = 180000 }) {
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
-    if (expected?.id != null) {
-      const [item] = await chrome.downloads.search({ id: expected.id });
+    const idx = expectedQueue.findIndex((e) => e.id != null);
+    if (idx !== -1) {
+      const exp = expectedQueue[idx];
+      const [item] = await chrome.downloads.search({ id: exp.id });
       if (item?.state === "complete") {
-        expected = null;
+        expectedQueue.splice(idx, 1);
         chrome.downloads.erase({ id: item.id }); // tidy Chrome's download list; the file stays
         return item.filename;
       }
       if (item?.state === "interrupted") {
-        expected = null;
+        expectedQueue.splice(idx, 1);
         throw new Error(`download interrupted: ${item.error}`);
       }
     }
-    await sleep(500);
+    await sleep(400);
   }
-  expected = null;
   throw new Error("download dari Flow tidak dimulai (menu Download tidak terklik?)");
 }
 
-async function detach() {
-  await detachAll();
+async function detach(_msg, tabId) {
+  if (tabId && attachedTabs.has(tabId)) {
+    await chrome.debugger.detach({ tabId }).catch(() => {});
+    attachedTabs.delete(tabId);
+  }
   return true;
 }
 

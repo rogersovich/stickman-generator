@@ -82,7 +82,14 @@ function render() {
 
 $("openApp").onclick = () => chrome.tabs.create({ url: state.appUrl });
 $("openSettings").onclick = () => chrome.tabs.create({ url: `${state.appUrl}/#/settings` });
-$("openFlowTab").onclick = () => chrome.tabs.create({ url: "https://flow.google.com/" });
+$("openFlowTab").onclick = async () => {
+  const currentTabs = await chrome.tabs.query({ url: ["https://flow.google.com/*", "https://labs.google/*"] });
+  const activeUrl = currentTabs[0]?.url || "https://flow.google.com/";
+  const needed = Math.max(1, 3 - currentTabs.length);
+  for (let i = 0; i < needed; i++) {
+    await chrome.tabs.create({ url: activeUrl });
+  }
+};
 
 $("toggle").onclick = async () => {
   const s = await load();

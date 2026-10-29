@@ -18,7 +18,7 @@ const SELECTORS = {
 // Fixed internals. Everything the user can tune lives in the web UI (Pengaturan) -> GET /api/settings.
 const TIMING = {
   pauseAfterPunctuation: [150, 550],
-  idlePoll: [8000, 15000],
+  idlePoll: [1500, 3000],
   imageStableFor: 4000,
 };
 
