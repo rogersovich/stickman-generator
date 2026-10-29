@@ -265,32 +265,21 @@ async function submitPrompt(input) {
 async function pastePrompt(el, text) {
   // Typing Enter would submit, so line breaks become spaces ("Create Image:" stays first).
   text = text.replace(/\s*\n\s*/g, " ");
+  el.focus?.();
   await trustedClick(el);
-  await sleep(rand(40, 100));
+  await sleep(rand(40, 80));
   await send({ type: "trustedClear" });
-  await sleep(rand(40, 100));
+  await sleep(rand(40, 80));
+  // Native Chrome DevTools insertText: pastes entire prompt in one call instantly
   await send({ type: "trustedType", text });
-}
 
-async function typeLikeHuman(el, text, mode, charDelay) {
-  // Typing Enter would submit, so line breaks become spaces ("Create Image:" stays first).
-  text = text.replace(/\s*\n\s*/g, " ");
-  await trustedClick(el);
-  await sleep(rand(200, 500));
-  await send({ type: "trustedClear" });
-  await sleep(rand(150, 400));
-
-  if (mode === "fast") {
-    await send({ type: "trustedType", text });
-    return;
-  }
-
-  const { min, max } = charDelay;
-  for (const ch of text) {
-    checkStopped();
-    await send({ type: "trustedType", text: ch });
-    await sleep(rand(min, max));
-    if (/[.,:]/.test(ch)) await sleep(randRange(TIMING.pauseAfterPunctuation));
+  // Ensure textarea event is fired
+  if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+    if (!el.value || el.value.length < 20) {
+      el.value = text;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
   }
 }
 
@@ -518,11 +507,7 @@ async function runJob(job, cfg) {
 
   // Tempel prompt instan via paste (tanpa jeda berpikir sebelum ketik)
   step("menempel prompt (paste instan)…");
-  if (cfg.typing_mode === "human" && cfg.char_delay_ms?.max > 0) {
-    await typeLikeHuman(input, job.prompt, cfg.typing_mode, cfg.char_delay_ms);
-  } else {
-    await pastePrompt(input, job.prompt);
-  }
+  await pastePrompt(input, job.prompt);
 
   const beforeSendWait = cfg.before_send ? secRange(cfg.before_send) : 0.3;
   await sleep(Math.max(150, Math.min(beforeSendWait * 1000, 800)));

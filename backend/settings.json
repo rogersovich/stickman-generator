@@ -1,0 +1,40 @@
+{
+  "default_model": "gcli/grok-4.7",
+  "seconds_per_scene": 7.0,
+  "rewrite_model": "gemini/gemini-3.5-flash-lite",
+  "default_style_id": "doodle-stickman",
+  "default_language": "Indonesia",
+  "tempo_preset": "cepat",
+  "delay_between_images": {
+    "min": 4.0,
+    "max": 12.0
+  },
+  "delay_between_redownloads": {
+    "min": 2.0,
+    "max": 4.0
+  },
+  "think_before_typing": {
+    "min": 0,
+    "max": 0
+  },
+  "char_delay_ms": {
+    "min": 0,
+    "max": 0
+  },
+  "before_send": {
+    "min": 0.2,
+    "max": 0.5
+  },
+  "typing_mode": "fast",
+  "concurrent_generate": true,
+  "max_concurrency": 3,
+  "break_every_images": 0,
+  "break_minutes": {
+    "min": 3.0,
+    "max": 5.0
+  },
+  "session_limit_images": 0,
+  "resolution": "2K",
+  "notifications": true,
+  "image_timeout_sec": 240.0
+}
