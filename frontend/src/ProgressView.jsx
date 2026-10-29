@@ -350,7 +350,15 @@ export default function ProgressView({ project, setProject }) {
                     {s.title_text && <span className="ml-2 font-sans font-semibold text-amber-300">{s.title_text}</span>}
                   </span>
                   <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-mono ${BADGE[s.image_status]}`}>
-                    {s.is_merged ? `DUAL (Scene ${(s.merged_with ?? i - 1) + 1})` : s.job_kind === "redownload" && s.image_status !== "done" ? `2K ${s.image_status}` : s.image_status}
+                    {s.is_merged
+                      ? `DUAL (Scene ${(s.merged_with ?? i - 1) + 1})`
+                      : s.job_kind === "redownload" && s.image_status !== "done"
+                      ? `2K ${s.image_status}`
+                      : s.image_status === "done"
+                      ? s.image_hd
+                        ? "2K HD"
+                        : "1K"
+                      : s.image_status}
                   </span>
                 </div>
 

@@ -41,7 +41,9 @@ function renderState() {
     $("jobTotal").textContent = duration(Date.now() - job.startedAt);
 
     const remaining = Math.max(0, job.total - job.scene);
-    const estSeconds = Math.round((remaining * 26) / 3);
+    const estSeconds = job.kind?.includes("2K") || job.kind?.includes("ulang")
+      ? Math.round(remaining * 8)
+      : Math.round((remaining * 22) / 3);
     const m = Math.floor(estSeconds / 60);
     const s = estSeconds % 60;
     $("jobEta").textContent = remaining === 0 ? "Hampir selesai ✓" : `±${m}m ${s}s (${remaining} frame)`;

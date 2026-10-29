@@ -35,6 +35,7 @@ const DEFAULT_WORKER_SETTINGS = {
   break_minutes: { min: 3, max: 5 },
   session_limit_images: 0,
   resolution: "2K",
+  download_mode: "batch_end",
   notifications: true,
   image_timeout_sec: 240,
 };
@@ -133,6 +134,15 @@ async function notifyIfProjectDone(cfg, projectId) {
     if (p.status !== "done") return;
     const done = p.scenes.filter((s) => s.image_status === "done").length;
     const failed = p.scenes.filter((s) => s.image_status === "failed").length;
+    const lowRes = (p.scenes || []).filter((s) => s.needs_hd).length;
+
+    // If batch_end mode is active and user chose 2K, auto-transition to downloading 2K files
+    if (lowRes > 0 && cfg.download_mode === "batch_end" && cfg.resolution === "2K") {
+      log(`Semua prompt selesai ter-generate! Mulai mengunduh 2K (${lowRes} frame) di akhir…`, "ok");
+      await api("POST", `/api/projects/${projectId}/redownload`).catch(() => {});
+      return;
+    }
+
     notify(cfg, "Project selesai ✓", `${p.title}\n${done} gambar selesai${failed ? `, ${failed} gagal` : ""}`, projectId);
   } catch {}
 }
@@ -434,7 +444,14 @@ async function downloadViaMenu(src, job, resolution) {
     }
     await trustedHover(download);
     await sleep(rand(600, 1100));
-    const option = await waitForEl(() => findMenuItem(new RegExp(`(^|\\n)\\s*${resolution}\\b`)), 3000);
+    const optionRe = new RegExp(`(^|\\s|\\n)${resolution}\\b`, "i");
+    let option = await waitForEl(() => findMenuItem(optionRe), 1500);
+    if (!option) {
+      // In some Angular Material menus, clicking is needed to trigger the submenu
+      await trustedClick(download);
+      await sleep(rand(500, 900));
+      option = await waitForEl(() => findMenuItem(optionRe), 3000);
+    }
     if (!option) {
       lastError = `pilihan ${resolution} tidak ditemukan/terkunci`;
       await send({ type: "trustedEscape" });
@@ -448,7 +465,7 @@ async function downloadViaMenu(src, job, resolution) {
   throw new Error(lastError);
 }
 
-// ---------- re-download: find an existing image in Flow by the hash of its saved thumbnail ----------
+// ---------- re-download: find an existing image in Flow by flow_src or hash ----------
 
 async function sha256Hex(buffer) {
   const digest = await crypto.subtle.digest("SHA-256", buffer);
@@ -477,41 +494,67 @@ function findScroller(el) {
   return null;
 }
 
-async function findImageByHash(hash) {
+async function findImageForJob(job) {
   const checked = new Set();
-  for (let round = 0; round < 15; round++) {
+  const cleanUrl = (u) => (u || "").replace(/=[swh]\d+[^/]*$/, "");
+  for (let round = 0; round < 25; round++) {
     checkStopped();
     const imgs = [...document.images].filter(
       (i) => isVisible(i) && Math.max(i.naturalWidth, i.naturalHeight) >= SELECTORS.minImageSize
     );
-    for (const img of imgs) {
-      const src = img.currentSrc || img.src;
-      if (!src || checked.has(src)) continue;
-      checked.add(src);
-      try {
-        if ((await srcHash(src)) === hash) {
-          img.scrollIntoView({ block: "center" });
-          await sleep(rand(500, 900));
-          return src;
-        }
-      } catch (e) {
-        console.warn("[stickman-worker] hash failed", src.slice(0, 60), e.message);
+
+    // 1. Exact or clean URL match if flow_src was recorded (instant and 100% reliable)
+    if (job.flow_src) {
+      const match = imgs.find((i) => {
+        const s = i.currentSrc || i.src;
+        return s && (s === job.flow_src || cleanUrl(s) === cleanUrl(job.flow_src));
+      });
+      if (match) {
+        match.scrollIntoView({ block: "center", behavior: "smooth" });
+        await sleep(rand(400, 700));
+        return match.currentSrc || match.src;
       }
     }
-    // gallery is lazy-loaded: scroll down and look again
-    const scroller = findScroller(imgs.at(-1));
-    if (!scroller || scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 5) break;
-    scroller.scrollBy({ top: scroller.clientHeight * 0.8, behavior: "smooth" });
-    await sleep(rand(1200, 1800));
+
+    // 2. Hash match fallback
+    if (job.thumb_sha256) {
+      for (const img of imgs) {
+        const src = img.currentSrc || img.src;
+        if (!src || checked.has(src)) continue;
+        checked.add(src);
+        try {
+          if ((await srcHash(src)) === job.thumb_sha256) {
+            img.scrollIntoView({ block: "center", behavior: "smooth" });
+            await sleep(rand(400, 700));
+            return src;
+          }
+        } catch (e) {
+          console.warn("[stickman-worker] hash failed", src.slice(0, 60), e.message);
+        }
+      }
+    }
+
+    // Gallery is lazy-loaded: scroll to find older tiles
+    const scroller = findScroller(imgs.at(-1)) || document.scrollingElement || document.body;
+    if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 15) {
+      if (round < 3) {
+        scroller.scrollTo({ top: 0, behavior: "smooth" });
+        await sleep(1000);
+        continue;
+      }
+      break;
+    }
+    scroller.scrollBy({ top: scroller.clientHeight * 0.75, behavior: "smooth" });
+    await sleep(rand(1000, 1500));
   }
-  throw new Error(`gambar tidak ditemukan di halaman Flow (dicek ${checked.size} gambar). Buka project Flow tempat gambar ini dibuat.`);
+  throw new Error(`gambar Scene ${job.scene_index + 1} tidak ditemukan di halaman Flow.`);
 }
 
 async function runRedownload(job, cfg) {
-  if (await send({ type: "attach" })) await sleep(1500);
+  if (await send({ type: "attach" })) await sleep(1200);
   step("mencari gambar di Flow…");
-  const src = await findImageByHash(job.thumb_sha256);
-  const res = cfg.resolution === "thumbnail" ? "2K" : cfg.resolution;
+  const src = await findImageForJob(job);
+  const res = cfg.resolution === "thumbnail" ? "1K" : cfg.resolution;
   step(`download ${res}…`);
   const file = await downloadViaMenu(src, job, res);
   await api("POST", `/api/jobs/${job.project_id}/${job.scene_index}/result-file`, { path: file });
@@ -689,9 +732,12 @@ async function workerLoop() {
           };
 
           const path = `/api/jobs/${job.project_id}/${job.scene_index}`;
-          step(`download ${cfg.resolution}…`);
-          let note = null;
-          if (cfg.resolution !== "thumbnail") {
+          const isImmediate = cfg.download_mode === "immediate";
+
+          if (isImmediate && cfg.resolution !== "thumbnail") {
+            // Immediate mode: download directly via menu per scene
+            step(`download ${cfg.resolution}…`);
+            let note = null;
             try {
               const file = await downloadViaMenu(src, job, cfg.resolution);
               await api("POST", `${path}/result-file`, { path: file });
@@ -700,16 +746,23 @@ async function workerLoop() {
               note = `resolusi rendah: download ${cfg.resolution} gagal: ${e.message}`;
               try {
                 const image = await grabImage(src);
-                await api("POST", `${path}/result`, { image_base64: image.base64, mime: image.mime, note });
+                await api("POST", `${path}/result`, { image_base64: image.base64, mime: image.mime, flow_src: src, note });
               } catch (err) {
                 log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
                 await api("POST", `${path}/fail`, { error: err.message }).catch(() => {});
               }
             }
           } else {
+            // Batch-end mode (or thumbnail): grab image instantly (<200ms) without menu clicks
+            step(cfg.resolution === "1K" ? "menyimpan 1K instan…" : "menyimpan pratinjau…");
             try {
               const image = await grabImage(src);
-              await api("POST", `${path}/result`, { image_base64: image.base64, mime: image.mime, note });
+              await api("POST", `${path}/result`, {
+                image_base64: image.base64,
+                mime: image.mime,
+                flow_src: src,
+                note: cfg.resolution === "1K" ? "1K asli" : "pratinjau siap 2K",
+              });
             } catch (err) {
               log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
               await api("POST", `${path}/fail`, { error: err.message }).catch(() => {});

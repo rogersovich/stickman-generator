@@ -380,7 +380,7 @@ def get_next_job():
 @app.post("/api/jobs/{project_id}/{index}/result")
 def post_result(project_id: str, index: int, body: JobResultIn):
     try:
-        jobs.save_result(project_id, index, body.image_base64, body.mime, body.note)
+        jobs.save_result(project_id, index, body.image_base64, body.mime, body.note, flow_src=body.flow_src)
     except LookupError as e:
         raise HTTPException(404, str(e))
     return {"ok": True}

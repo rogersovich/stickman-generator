@@ -23,6 +23,7 @@ class Scene(BaseModel):
     merged_with: int | None = None  # 0-based index of the target scene
     image_status: ImageStatus = "pending"
     image_file: str | None = None
+    flow_src: str | None = None  # Exact Google Flow CDN image URL for 100% reliable tracking
     error: str | None = None
     started_at: str | None = None
     image_hd: bool | None = None  # True = full-res download from Flow, False = thumbnail, None = unknown (old data)
@@ -95,6 +96,7 @@ class UpdateDraftIn(BaseModel):
 class JobResultIn(BaseModel):
     image_base64: str
     mime: str = "image/png"
+    flow_src: str | None = None
     note: str | None = None  # e.g. "low resolution: download menu failed"
 
 

@@ -62,6 +62,7 @@ def _refresh_status(project: Project) -> None:
                     other.image_status = parent.image_status
                     other.image_file = parent.image_file
                     other.image_hd = parent.image_hd
+                    other.flow_src = getattr(parent, "flow_src", None)
                     other.error = parent.error
 
     if project.status == "generating" and all(s.image_status in ("done", "failed") for s in project.scenes):
@@ -96,9 +97,10 @@ def next_job() -> dict | None:
                         "kind": s.job_kind,
                     }
                     if s.job_kind == "redownload":
-                        data = (storage.project_dir(p.id) / s.image_file).read_bytes()
+                        data = (storage.project_dir(p.id) / s.image_file).read_bytes() if s.image_file else b""
                         job |= {
-                            "thumb_sha256": hashlib.sha256(data).hexdigest(),
+                            "thumb_sha256": hashlib.sha256(data).hexdigest() if data else "",
+                            "flow_src": getattr(s, "flow_src", None),
                             "delay_min": cfg.delay_between_redownloads.min,
                             "delay_max": cfg.delay_between_redownloads.max,
                         }
@@ -123,7 +125,7 @@ def _get_scene_project(project_id: str, index: int) -> Project:
     return p
 
 
-def _store(project_id: str, index: int, ext: str, write, note: str | None, hd: bool) -> Project:
+def _store(project_id: str, index: int, ext: str, write, note: str | None, hd: bool, flow_src: str | None = None) -> Project:
     with storage.lock:
         p = _get_scene_project(project_id, index)
         d = storage.project_dir(project_id)
@@ -133,22 +135,28 @@ def _store(project_id: str, index: int, ext: str, write, note: str | None, hd: b
         write(d / name)
         s = p.scenes[index]
         s.image_status, s.image_file, s.error, s.image_hd, s.job_kind = "done", name, note, hd, "generate"
+        if flow_src:
+            s.flow_src = flow_src
 
         # Auto-link image to any merged scenes referencing this scene
         for other in p.scenes:
             if getattr(other, "is_merged", False) and getattr(other, "merged_with", None) == index:
                 other.image_status, other.image_file, other.error, other.image_hd, other.job_kind = "done", name, note, hd, "generate"
+                if flow_src:
+                    other.flow_src = flow_src
 
         _refresh_status(p)
         storage.save(p)
         return p
 
 
-def save_result(project_id: str, index: int, image_base64: str, mime: str, note: str | None = None) -> Project:
+def save_result(project_id: str, index: int, image_base64: str, mime: str, note: str | None = None, flow_src: str | None = None, hd: bool = False) -> Project:
     if "," in image_base64[:100]:  # strip "data:image/png;base64," prefix
         image_base64 = image_base64.split(",", 1)[1]
     data = base64.b64decode(image_base64)
-    return _store(project_id, index, EXT.get(mime, "png"), lambda f: f.write_bytes(data), note, hd=False)
+    cfg = settings.load()
+    is_hd = hd or (cfg.resolution == "1K" and len(data) > 100_000)
+    return _store(project_id, index, EXT.get(mime, "png"), lambda f: f.write_bytes(data), note, hd=is_hd, flow_src=flow_src)
 
 
 def save_result_file(project_id: str, index: int, path: str, note: str | None = None) -> Project:

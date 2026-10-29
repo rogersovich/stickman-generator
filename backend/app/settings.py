@@ -62,6 +62,7 @@ class AppSettings(BaseModel):
 
     # download
     resolution: Literal["2K", "1K", "thumbnail"] = "2K"
+    download_mode: Literal["batch_end", "immediate"] = "batch_end"
 
     # Chrome notifications from the extension (project done, session limit, repeated errors)
     notifications: bool = True

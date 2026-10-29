@@ -232,20 +232,41 @@ export default function Settings() {
         </div>
       </Section>
 
-      <Section title="Penyimpanan & Resolusi Download" desc="Ukuran gambar yang diunduh ke folder output project Anda." icon={HardDrive}>
-        <Field label="Resolusi Default Gambar">
-          <div className="sm:max-w-md">
-            <Select
+      <Section title="Penyimpanan & Resolusi Download" desc="Pengaturan ukuran file dan waktu unduh gambar dari Google Flow." icon={HardDrive}>
+        <div className="space-y-4">
+          <Field label="Resolusi Gambar">
+            <ChoiceCards
+              className="sm:grid-cols-3"
               value={settings.resolution}
               onChange={(v) => update({ resolution: v })}
               options={[
-                { value: "2K", label: "2K (Ultra High-Res)", desc: "Diunduh via menu Flow (disarankan untuk hasil terbaik)" },
-                { value: "1K", label: "1K (Standar Flow)", desc: "Ukuran standar langsung dari canvas Flow" },
-                { value: "thumbnail", label: "Thumbnail Saja", desc: "Cepat tapi kecil (±286×512)" },
+                { value: "2K", label: "2K (Ultra High-Res)", desc: "2752×1536 · AI upscale Google Flow untuk kualitas visual terbaik" },
+                { value: "1K", label: "1K (Ukuran Asli Flow)", desc: "1376×768 · Ukuran asli Flow, langsung tersimpan instan tanpa upscale" },
+                { value: "thumbnail", label: "Thumbnail", desc: "Pratinjau cepat ukuran ringan untuk drafting storyboard" },
               ]}
             />
-          </div>
-        </Field>
+          </Field>
+
+          <Field label="Waktu Unduh (Download Mode)">
+            <ChoiceCards
+              className="sm:grid-cols-2"
+              value={settings.download_mode || "batch_end"}
+              onChange={(v) => update({ download_mode: v })}
+              options={[
+                {
+                  value: "batch_end",
+                  label: "Download di Akhir (Direkomendasikan)",
+                  desc: "Fokus generate dulu semua scene secara paralel (cepat & aman). Setelah semua selesai, worker mengunduh file 1K/2K secara urut tanpa takut kejar-kejaran.",
+                },
+                {
+                  value: "immediate",
+                  label: "Download Langsung per Scene",
+                  desc: "Membuka menu download Flow setiap kali 1 gambar selesai. Perhatian: bisa terjadi perebutan klik mouse saat generate paralel aktif.",
+                },
+              ]}
+            />
+          </Field>
+        </div>
       </Section>
 
       <Section title="Notifikasi Sistem" desc="Notifikasi pop-up desktop saat tugas latar belakang selesai." icon={Volume2}>
