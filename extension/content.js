@@ -285,8 +285,20 @@ async function pastePrompt(el, text) {
 
 function isTileGenerating(img) {
   let node = img.parentElement;
-  for (let depth = 0; depth < 6 && node; depth++, node = node.parentElement) {
-    if (/\b\d{1,3}\s*%\b/.test(node.innerText || "")) return true;
+  for (let depth = 0; depth < 4 && node; depth++, node = node.parentElement) {
+    if (node.querySelector?.('[role="progressbar"], mat-spinner, .mat-mdc-progress-spinner')) return true;
+    const spans = node.querySelectorAll("span, div, p");
+    for (const el of spans) {
+      if (isVisible(el) && /^\s*\d{1,3}\s*%\s*$/.test(el.textContent || "")) return true;
+    }
+  }
+  return false;
+}
+
+function isSameCard(a, b) {
+  let p = a.parentElement;
+  for (let i = 0; i < 5 && p; i++, p = p.parentElement) {
+    if (p.contains(b)) return true;
   }
   return false;
 }
@@ -578,9 +590,8 @@ async function workerLoop() {
         continue;
       }
 
-      // Check if send button is ready to receive a new prompt
-      const sendBtn = findSendButton(input);
-      const isInputReady = sendBtn && !isDisabled(sendBtn) && inputText(input).length < 20;
+      // Check if prompt input is ready to accept a new prompt (input exists, visible, and not containing an unsent prompt)
+      const isInputReady = input && isVisible(input) && inputText(input).length < 20;
 
       // 1. SUBMIT NEXT PROMPT IF UNDER CONCURRENCY LIMIT AND INPUT IS READY
       if (inFlight.length < maxConcurrency && isInputReady) {
@@ -654,9 +665,19 @@ async function workerLoop() {
         if (freshImgs.length > 0) {
           const target = inFlight.shift();
           const job = target.job;
-          const freshImg = freshImgs[0];
+          // In Google Flow, new cards are prepended to the top of the grid.
+          // freshImgs.at(-1) is the earliest created card among fresh items, matching FIFO inFlight queue.
+          const freshImg = freshImgs.length > 1 ? freshImgs.at(-1) : freshImgs[0];
           const src = freshImg.currentSrc || freshImg.src;
           completedSrcs.add(src);
+
+          // Mark any other image elements that belong to this same card/tile as completed too
+          for (const other of freshImgs) {
+            if (other === freshImg || isSameCard(other, freshImg)) {
+              const s = other.currentSrc || other.src;
+              if (s) completedSrcs.add(s);
+            }
+          }
 
           currentJob = {
             label: `Scene ${job.scene_index + 1}/${job.total}`,

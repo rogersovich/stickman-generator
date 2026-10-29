@@ -43,8 +43,10 @@ def _fail_scene(s: Scene, error: str) -> None:
 
 def _expire_stale(project: Project) -> bool:
     changed = False
+    cfg = settings.load()
+    timeout = min(config.JOB_TIMEOUT_SECONDS, max(60.0, getattr(cfg, "image_timeout_sec", 180.0)))
     for s in project.scenes:
-        if s.image_status == "generating" and _age_seconds(s.started_at) > config.JOB_TIMEOUT_SECONDS:
+        if s.image_status == "generating" and _age_seconds(s.started_at) > timeout:
             _fail_scene(s, "timeout: no result from extension")
             changed = True
     return changed
