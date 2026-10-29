@@ -283,6 +283,14 @@ async function pastePrompt(el, text) {
   }
 }
 
+function isTileGenerating(img) {
+  let node = img.parentElement;
+  for (let depth = 0; depth < 6 && node; depth++, node = node.parentElement) {
+    if (/\b\d{1,3}\s*%\b/.test(node.innerText || "")) return true;
+  }
+  return false;
+}
+
 // Flow is still generating while the send button shows a stop icon (■) or a "35%" progress badge is visible.
 function isGenerating() {
   const stopButton = [...document.querySelectorAll('button, [role="button"]')].some(
@@ -544,102 +552,192 @@ async function runJob(job, cfg) {
 }
 
 let running = false;
+let inFlight = []; // [{ job, submittedAt }]
+let completedSrcs = new Set();
 
 async function workerLoop() {
   if (running) return;
   running = true;
   stopRequested = false;
   lastStateKey = "";
-  let stoppedMidJob = false;
-  let generated = 0; // new images made this session (re-downloads don't count: no credits)
-  let failStreak = 0; // consecutive failed jobs; notify once at 3
+  inFlight = [];
+  completedSrcs = imageSrcs();
+  let generated = 0; // new images made this session
+  let failStreak = 0; // consecutive failed jobs
   log("Worker ON", "ok");
+
   try {
     while (await isEnabled()) {
-      if (!findInput()) {
-        setState("problem", "Buka sebuah project di Flow (kolom prompt belum ada)");
-        if (!(await idle(5000))) break;
-        continue;
-      }
-
-      let job;
-      try {
-        job = await api("GET", "/api/jobs/next");
-      } catch (e) {
-        setState("problem", `Backend tidak bisa dihubungi: ${e.message}`);
-        if (!(await idle(10000))) break;
-        continue;
-      }
-      if (!job) {
-        await send({ type: "detach" }).catch(() => {}); // removes the "debugging" bar while idle
-        setState("waiting", "Menunggu job dari app…");
-        if (!(await idle(rand(...TIMING.idlePoll)))) break;
-        continue;
-      }
-
+      checkStopped();
       const cfg = await loadWorkerSettings();
-      const kindLabel = job.kind === "redownload" ? "ambil ulang" : "generate";
-      currentJob = {
-        label: `Scene ${job.scene_index + 1}/${job.total}`,
-        project: job.project_title || job.project_id,
-        scene: job.scene_index + 1,
-        total: job.total,
-        kind: kindLabel,
-        startedAt: Date.now(),
-      };
-      lastStateKey = "";
-      const path = `/api/jobs/${job.project_id}/${job.scene_index}`;
-      try {
-        if (job.kind === "redownload") await runRedownload(job, cfg);
-        else await runJob(job, cfg);
-        const secs = Math.round((Date.now() - currentJob.startedAt) / 1000);
-        log(`${currentJob.label} (${kindLabel}) tersimpan ✓ · ${secs} dtk · ${currentJob.project}`, "ok");
-        failStreak = 0;
-        await notifyIfProjectDone(cfg, job.project_id);
-      } catch (e) {
-        if (e instanceof WorkerStopped) {
-          await api("POST", `${path}/release`).catch(() => {});
-          log(`Worker OFF · ${currentJob.label} dikembalikan ke antrian`, "warn");
-          stoppedMidJob = true;
-          break;
-        }
-        log(`${currentJob.label} (${kindLabel}) gagal: ${e.message}`, "error");
-        await api("POST", `${path}/fail`, { error: e.message }).catch(() => {});
-        failStreak += 1;
-        if (failStreak === 3) {
-          notify(cfg, "3 scene gagal berturut-turut", `${currentJob.project}\nError terakhir: ${e.message}`.slice(0, 300), job.project_id);
-        }
-        await notifyIfProjectDone(cfg, job.project_id);
-      } finally {
-        currentJob = null;
+      const maxConcurrency = cfg.concurrent_generate !== false ? (cfg.max_concurrency || 3) : 1;
+      const input = findInput();
+      if (!input) {
+        setState("problem", "Buka sebuah project di Flow (kolom prompt belum ada)");
+        if (!(await idle(4000))) break;
+        continue;
       }
 
-      if (job.kind !== "redownload") {
-        generated += 1;
-        if (cfg.session_limit_images > 0 && generated >= cfg.session_limit_images) {
-          log(`Batas sesi tercapai (${generated} gambar). Worker dimatikan otomatis.`, "warn");
-          notify(cfg, "Batas sesi tercapai", `${generated} gambar dibuat sesi ini. Worker dimatikan otomatis.`, job.project_id);
-          await chrome.storage.local.set({ enabled: false });
-          break;
+      // Check if send button is ready to receive a new prompt
+      const sendBtn = findSendButton(input);
+      const isInputReady = sendBtn && !isDisabled(sendBtn) && inputText(input).length < 20;
+
+      // 1. SUBMIT NEXT PROMPT IF UNDER CONCURRENCY LIMIT AND INPUT IS READY
+      if (inFlight.length < maxConcurrency && isInputReady) {
+        let job = null;
+        try {
+          job = await api("GET", "/api/jobs/next");
+        } catch (e) {
+          setState("problem", `Backend tidak bisa dihubungi: ${e.message}`);
+          if (!(await idle(6000))) break;
+          continue;
         }
-        if (cfg.break_every_images > 0 && generated % cfg.break_every_images === 0) {
-          const ms = rand(cfg.break_minutes.min * 60000, cfg.break_minutes.max * 60000);
-          setState("break", `Istirahat ${Math.round(ms / 60000)} menit setelah ${generated} gambar`, { until: Date.now() + ms });
-          if (!(await idle(ms))) break;
+
+        if (job) {
+          if (await send({ type: "attach" })) await sleep(800);
+          if (job.kind === "redownload") {
+            currentJob = {
+              label: `Scene ${job.scene_index + 1}/${job.total}`,
+              project: job.project_title || job.project_id,
+              scene: job.scene_index + 1,
+              total: job.total,
+              kind: "ambil ulang",
+              startedAt: Date.now(),
+            };
+            try {
+              await runRedownload(job, cfg);
+              log(`${currentJob.label} (ambil ulang) tersimpan ✓`, "ok");
+            } catch (e) {
+              log(`${currentJob.label} ambil ulang gagal: ${e.message}`, "error");
+              await api("POST", `/api/jobs/${job.project_id}/${job.scene_index}/fail`, { error: e.message }).catch(() => {});
+            } finally {
+              currentJob = null;
+            }
+          } else {
+            currentJob = {
+              label: `Scene ${job.scene_index + 1}/${job.total}`,
+              project: job.project_title || job.project_id,
+              scene: job.scene_index + 1,
+              total: job.total,
+              kind: "generate",
+              startedAt: Date.now(),
+            };
+            step("menempel prompt (paste instan)…");
+            await pastePrompt(input, job.prompt);
+            await sleep(Math.max(150, Math.min(secRange(cfg.before_send) * 1000, 600)));
+            checkStopped();
+            step("mengirim prompt…");
+            await submitPrompt(input);
+            inFlight.push({ job, submittedAt: Date.now() });
+            log(`Scene ${job.scene_index + 1}/${job.total} terkirim! (${inFlight.length}/${maxConcurrency} sedang diproses)`, "ok");
+            setState("job", `${inFlight.length} gambar sedang diproses Flow secara paralel…`);
+            await sleep(400);
+            continue; // check immediately if another slot can be submitted!
+          }
+        }
+      }
+
+      // 2. CHECK FOR COMPLETED IMAGES FROM IN-FLIGHT GENERATIONS
+      if (inFlight.length > 0) {
+        const freshImgs = [...document.images].filter((img) => {
+          const src = img.currentSrc || img.src;
+          return (
+            src &&
+            !completedSrcs.has(src) &&
+            img.complete &&
+            Math.max(img.naturalWidth, img.naturalHeight) >= SELECTORS.minImageSize &&
+            isVisible(img) &&
+            !isTileGenerating(img)
+          );
+        });
+
+        if (freshImgs.length > 0) {
+          const target = inFlight.shift();
+          const job = target.job;
+          const freshImg = freshImgs[0];
+          const src = freshImg.currentSrc || freshImg.src;
+          completedSrcs.add(src);
+
+          currentJob = {
+            label: `Scene ${job.scene_index + 1}/${job.total}`,
+            project: job.project_title || job.project_id,
+            scene: job.scene_index + 1,
+            total: job.total,
+            kind: "generate",
+            startedAt: target.submittedAt,
+          };
+
+          const path = `/api/jobs/${job.project_id}/${job.scene_index}`;
+          step(`download ${cfg.resolution}…`);
+          let note = null;
+          if (cfg.resolution !== "thumbnail") {
+            try {
+              const file = await downloadViaMenu(src, job, cfg.resolution);
+              await api("POST", `${path}/result-file`, { path: file });
+            } catch (e) {
+              if (e instanceof WorkerStopped) throw e;
+              note = `resolusi rendah: download ${cfg.resolution} gagal: ${e.message}`;
+              try {
+                const image = await grabImage(src);
+                await api("POST", `${path}/result`, { image_base64: image.base64, mime: image.mime, note });
+              } catch (err) {
+                log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
+                await api("POST", `${path}/fail`, { error: err.message }).catch(() => {});
+              }
+            }
+          } else {
+            try {
+              const image = await grabImage(src);
+              await api("POST", `${path}/result`, { image_base64: image.base64, mime: image.mime, note });
+            } catch (err) {
+              log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
+              await api("POST", `${path}/fail`, { error: err.message }).catch(() => {});
+            }
+          }
+
+          const secs = Math.round((Date.now() - target.submittedAt) / 1000);
+          log(`${currentJob.label} tersimpan ✓ · ${secs} dtk (${inFlight.length} masih berjalan)`, "ok");
+          failStreak = 0;
+          generated += 1;
+          await notifyIfProjectDone(cfg, job.project_id);
+          currentJob = null;
+          continue;
+        }
+
+        // Check if oldest in-flight job timed out
+        const oldest = inFlight[0];
+        if (Date.now() - oldest.submittedAt > cfg.image_timeout_sec * 1000) {
+          inFlight.shift();
+          const job = oldest.job;
+          log(`Scene ${job.scene_index + 1} timeout: gambar Flow tidak selesai`, "error");
+          await api("POST", `/api/jobs/${job.project_id}/${job.scene_index}/fail`, { error: "timeout: gambar Flow tidak selesai" }).catch(() => {});
+          failStreak += 1;
+          if (failStreak === 3) {
+            notify(cfg, "3 scene gagal berturut-turut", `${job.project_title}\nTimeout menunggu gambar Flow`, job.project_id);
+          }
           continue;
         }
       }
 
-      const wait = rand(job.delay_min * 1000, job.delay_max * 1000);
-      setState("delay", `Jeda ${Math.round(wait / 1000)} dtk sebelum job berikutnya`, { until: Date.now() + wait });
-      if (!(await idle(wait))) break;
+      // 3. IDLE / WAITING STATE
+      if (inFlight.length === 0) {
+        setState("waiting", "Menunggu job dari app…");
+        if (!(await idle(rand(...TIMING.idlePoll)))) break;
+      } else {
+        setState("job", `${inFlight.length} gambar sedang diproses Flow secara paralel…`);
+        if (!(await idle(1200))) break;
+      }
     }
   } finally {
     running = false;
     currentJob = null;
+    for (const target of inFlight) {
+      await api("POST", `/api/jobs/${target.job.project_id}/${target.job.scene_index}/release`).catch(() => {});
+    }
+    inFlight = [];
     await send({ type: "detach" }).catch(() => {});
     chrome.storage.local.set({ worker: { state: "off", label: "Worker OFF", since: Date.now() } });
-    if (!stoppedMidJob) log("Worker OFF");
+    log("Worker OFF");
   }
 }
 
