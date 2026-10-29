@@ -39,6 +39,12 @@ function renderState() {
     $("jobKind").textContent = job.kind;
     $("jobStep").textContent = `${job.step} (${duration(Date.now() - job.stepSince)})`;
     $("jobTotal").textContent = duration(Date.now() - job.startedAt);
+
+    const remaining = Math.max(0, job.total - job.scene);
+    const estSeconds = Math.round((remaining * 26) / 3);
+    const m = Math.floor(estSeconds / 60);
+    const s = estSeconds % 60;
+    $("jobEta").textContent = remaining === 0 ? "Hampir selesai ✓" : `±${m}m ${s}s (${remaining} frame)`;
   }
 }
 

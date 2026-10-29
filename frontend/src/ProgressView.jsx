@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, WandSparkles, X, Zap } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Clock, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, WandSparkles, X, Zap } from "lucide-react";
 import { api } from "./api.js";
 import NarrationEditor from "./NarrationEditor.jsx";
 import { useDialog } from "./ui.jsx";
@@ -174,6 +174,11 @@ export default function ProgressView({ project, setProject }) {
   const id = project.id;
   const active = project.status === "generating";
   const [preview, setPreview] = useState(null);
+  const [settings, setSettings] = useState(null);
+
+  useEffect(() => {
+    api.settings().then(setSettings).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -187,6 +192,17 @@ export default function ProgressView({ project, setProject }) {
   const vertical = project.format === "9:16";
   const act = (fn) => () => fn().then(setProject).catch((e) => dialog.alert({ title: "Aksi gagal", message: e.message }));
   const [narrationIndex, setNarrationIndex] = useState(null);
+
+  // Estimasi durasi selesai
+  const remainingScenes = project.scenes.filter((s) => s.image_status !== "done" && !s.is_merged).length;
+  const avgDelay = settings?.delay_between_images ? (settings.delay_between_images.min + settings.delay_between_images.max) / 2 : 10;
+  const avgFlowRender = 16;
+  const concurrency = (settings?.concurrent_generate ?? true) ? (settings?.max_concurrency ?? 3) : 1;
+  const timePerImage = avgFlowRender + avgDelay;
+  const totalSecondsRemaining = Math.round((remainingScenes * timePerImage) / Math.max(1, concurrency));
+  const etaMinutes = Math.floor(totalSecondsRemaining / 60);
+  const etaSeconds = totalSecondsRemaining % 60;
+  const etaText = etaMinutes > 0 ? `±${etaMinutes} mnt ${etaSeconds > 0 ? `${etaSeconds} dtk` : ""}` : `±${etaSeconds} dtk`;
 
   async function retry(i) {
     const failed = project.scenes[i].image_status === "failed";
@@ -223,14 +239,28 @@ export default function ProgressView({ project, setProject }) {
           </div>
         </div>
 
-        {/* Progress Bar with Monospace Indicators */}
+        {/* Progress Bar with Monospace Indicators & ETA */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs font-mono text-slate-400">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-400">
             <span>
               Progres Produksi: <b className="text-amber-400 font-semibold">{done}</b> / {project.scenes.length} frame selesai
               {failed > 0 && <span className="text-red-400 ml-2">({failed} gagal)</span>}
             </span>
-            <span className="font-semibold text-slate-200">{pct}%</span>
+            <div className="flex items-center gap-3">
+              {project.status === "generating" && remainingScenes > 0 && (
+                <span className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 font-mono text-xs font-semibold text-amber-300 shadow-2xs">
+                  <Clock size={12} className="text-amber-400" />
+                  <span>Sisa Waktu: <b>{etaText}</b></span>
+                  <span className="text-amber-400/70 font-normal">({remainingScenes} frame · {concurrency} slot)</span>
+                </span>
+              )}
+              {project.status === "done" && (
+                <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-mono text-xs font-semibold text-emerald-300">
+                  Semua Selesai ✓
+                </span>
+              )}
+              <span className="font-semibold text-slate-200">{pct}%</span>
+            </div>
           </div>
           <div className="h-2.5 overflow-hidden rounded-full border border-[#292e3b] bg-[#12141a]">
             <div

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Clock, Cpu, HardDrive, Info, Layers, Lock, Save, Sliders, Volume2, Zap } from "lucide-react";
+import { Check, Clock, Cpu, HardDrive, Info, Layers, Lock, Save, Sliders, Volume2 } from "lucide-react";
 import { api } from "./api.js";
 import { ChoiceCards, Select, Toggle } from "./ui.jsx";
 
@@ -166,7 +166,7 @@ export default function Settings() {
             { value: "custom", label: "Custom", desc: "Aktif saat nilai jeda diubah manual", disabled: settings.tempo_preset !== "custom" },
           ]}
         />
-        <div className="grid gap-4 sm:grid-cols-2 pt-2">
+        <div className="grid gap-4 sm:grid-cols-3 pt-2">
           <Field label="Jeda Antar Gambar (detik)" hint="Waktu jeda setelah gambar selesai sebelum mengambil job berikutnya.">
             <RangeInput value={settings.delay_between_images} onChange={pacing("delay_between_images")} unit="dtk" step={1} />
           </Field>
@@ -175,14 +175,6 @@ export default function Settings() {
           </Field>
           <Field label="Jeda Sebelum Klik Kirim (detik)" hint="Buffer sesaat setelah paste agar input Flow stabil sebelum send.">
             <RangeInput value={settings.before_send} onChange={pacing("before_send")} unit="dtk" step={0.1} />
-          </Field>
-          <Field label="Metode Pengetikan Prompt">
-            <div className="flex h-10 items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 text-xs text-amber-200">
-              <Zap size={14} className="text-amber-400 shrink-0" />
-              <span>
-                <strong className="text-amber-300">Paste Instan (Aktif)</strong>: Prompt ditempel langsung seketika tanpa jeda ketik per huruf &amp; tanpa jeda berpikir.
-              </span>
-            </div>
           </Field>
         </div>
       </Section>
