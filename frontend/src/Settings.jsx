@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Clock, Cpu, HardDrive, Info, Layers, Lock, Save, Sliders, Volume2 } from "lucide-react";
+import { AudioLines, Check, Clock, Cpu, HardDrive, Info, Layers, Lock, Play, Save, Sliders, Volume2 } from "lucide-react";
 import { api } from "./api.js";
 import { ChoiceCards, Select, Toggle } from "./ui.jsx";
 
@@ -75,10 +75,46 @@ function RangeInput({ value, onChange, unit, step = 0.1 }) {
   );
 }
 
+function SliderField({ label, hint, value, min, max, step = 1, defaultValue, unit = "", onChange }) {
+  const current = value ?? defaultValue;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="label mb-0">{label}</label>
+        <span className="font-mono text-xs text-amber-300">
+          {current}{unit ? ` ${unit}` : ""} <span className="text-slate-500 font-normal">(default: {defaultValue}{unit ? ` ${unit}` : ""})</span>
+        </span>
+      </div>
+      <div className="flex items-center gap-3">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={current}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="flex-1 accent-amber-500 cursor-pointer"
+        />
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          value={current}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="input font-mono text-xs w-20 text-right"
+        />
+      </div>
+      {hint && <p className="text-xs text-slate-400 leading-normal">{hint}</p>}
+    </div>
+  );
+}
+
 export default function Settings() {
   const [settings, setSettings] = useState(null);
   const [models, setModels] = useState([]);
   const [styles, setStyles] = useState([]);
+  const [voices, setVoices] = useState([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -87,6 +123,7 @@ export default function Settings() {
     api.settings().then(setSettings).catch((e) => setMessage({ error: true, text: e.message }));
     api.config().then((c) => setModels(c.models)).catch(() => {});
     api.styles().then(setStyles).catch(() => {});
+    api.voices().then(setVoices).catch(() => {});
   }, []);
 
   if (!settings) return <p className="p-8 text-center font-mono text-sm text-slate-400">{message?.text ?? "Memuat konfigurasi studio…"}</p>;
@@ -153,6 +190,152 @@ export default function Settings() {
           <Field label="Bahasa Narasi Default">
             <input className="input" value={settings.default_language} onChange={field("default_language")} />
           </Field>
+        </div>
+      </Section>
+
+      <Section
+        title="Suara & TTS (Langkah 2 Audio)"
+        desc="Pengaturan suara referensi default dan parameter model kloning audio (OmniVoice / VoxCPM2) untuk narasi per adegan."
+        icon={AudioLines}
+      >
+        <div className="space-y-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Suara Referensi Default" hint="Suara kloning yang otomatis dipakai saat membuat project baru.">
+              <div className="flex items-center gap-1.5">
+                <Select
+                  className="flex-1"
+                  value={settings.tts_voice_id ?? ""}
+                  onChange={(v) => update({ tts_voice_id: v || null })}
+                  options={[
+                    { value: "", label: "Belum dipilih (pilih suara referensi)" },
+                    ...voices.map((v) => ({ value: v.id, label: v.name, desc: `${v.duration.toFixed(1)} dtk` })),
+                  ]}
+                />
+                {settings.tts_voice_id && (
+                  <button
+                    type="button"
+                    className="btn-ghost px-2.5 py-2"
+                    onClick={() => new Audio(api.voiceAudioUrl(settings.tts_voice_id)).play()}
+                    title="Putar contoh suara"
+                    aria-label="Putar contoh suara"
+                  >
+                    <Play size={14} />
+                  </button>
+                )}
+              </div>
+            </Field>
+
+            <Field label="Model TTS Default" hint="Pilih arsitektur model default yang digunakan worker.">
+              <ChoiceCards
+                className="grid-cols-2"
+                value={settings.tts_model || "omnivoice"}
+                onChange={(v) => update({ tts_model: v })}
+                options={[
+                  {
+                    value: "omnivoice",
+                    label: "OmniVoice",
+                    desc: "24 kHz · ringan, cocok untuk Mac",
+                  },
+                  {
+                    value: "voxcpm2",
+                    label: "VoxCPM2",
+                    desc: "48 kHz · lebih berat, paling enak di GPU NVIDIA",
+                  },
+                ]}
+              />
+            </Field>
+          </div>
+
+          <div className="rounded-xl border border-[#292e3b] bg-[#12141a]/60 p-4 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#292e3b] pb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Parameter Tuning OmniVoice (24 kHz)
+              </span>
+              <span className="font-mono text-[11px] text-slate-400">Default Model</span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SliderField
+                label="Inference Steps (num_step)"
+                hint="Langkah difusi audio (4–64). Nilai lebih tinggi meningkatkan kejelasan suara."
+                value={settings.omnivoice?.num_step}
+                min={4}
+                max={64}
+                step={1}
+                defaultValue={16}
+                onChange={(v) => update({ omnivoice: { ...(settings.omnivoice || {}), num_step: v } })}
+              />
+              <SliderField
+                label="Guidance Scale"
+                hint="Kekuatan kepatuhan terhadap prompt suara referensi (0–5)."
+                value={settings.omnivoice?.guidance_scale}
+                min={0}
+                max={5}
+                step={0.1}
+                defaultValue={3.0}
+                onChange={(v) => update({ omnivoice: { ...(settings.omnivoice || {}), guidance_scale: v } })}
+              />
+              <SliderField
+                label="Time Shift (t_shift)"
+                hint="Offset kurva noise schedule difusi (0–1)."
+                value={settings.omnivoice?.t_shift}
+                min={0}
+                max={1}
+                step={0.05}
+                defaultValue={0.1}
+                onChange={(v) => update({ omnivoice: { ...(settings.omnivoice || {}), t_shift: v } })}
+              />
+              <SliderField
+                label="Kecepatan Bicara (speed)"
+                hint="Faktor pengali kecepatan vokal (0.5x–2.0x)."
+                value={settings.omnivoice?.speed}
+                min={0.5}
+                max={2.0}
+                step={0.05}
+                defaultValue={1.0}
+                unit="x"
+                onChange={(v) => update({ omnivoice: { ...(settings.omnivoice || {}), speed: v } })}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-[#292e3b] bg-[#12141a]/60 p-4 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#292e3b] pb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Parameter Tuning VoxCPM2 (48 kHz)
+              </span>
+              <span className="font-mono text-[11px] text-emerald-400">CUDA / NVIDIA Recommended</span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SliderField
+                label="CFG Value"
+                hint="Classifier-Free Guidance untuk kestabilan intonasi VoxCPM2 (1–5)."
+                value={settings.voxcpm2?.cfg_value}
+                min={1}
+                max={5}
+                step={0.1}
+                defaultValue={2.5}
+                onChange={(v) => update({ voxcpm2: { ...(settings.voxcpm2 || {}), cfg_value: v } })}
+              />
+              <SliderField
+                label="Inference Timesteps"
+                hint="Jumlah langkah inferensi VoxCPM2 (4–50)."
+                value={settings.voxcpm2?.inference_timesteps}
+                min={4}
+                max={50}
+                step={1}
+                defaultValue={10}
+                onChange={(v) => update({ voxcpm2: { ...(settings.voxcpm2 || {}), inference_timesteps: v } })}
+              />
+            </div>
+            <div className="pt-1">
+              <Toggle
+                checked={settings.voxcpm2?.studio_clean ?? true}
+                onChange={(v) => update({ voxcpm2: { ...(settings.voxcpm2 || {}), studio_clean: v } })}
+                label="Studio Clean Master"
+                desc="Membersihkan desis frekuensi tinggi 12 kHz+ pada vocoder VoxCPM2 dan gate noise floor antar jeda kata."
+              />
+            </div>
+          </div>
         </div>
       </Section>
 
