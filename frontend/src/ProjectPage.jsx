@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { api } from "./api.js";
+import AudioView from "./AudioView.jsx";
 import { go } from "./App.jsx";
 import { confirmDelete } from "./deleteProject.js";
 import { useDialog } from "./ui.jsx";
@@ -59,7 +60,7 @@ export default function ProjectPage({ id, step }) {
         <>
           <ProjectSteps project={project} step={step} />
           {step === "audio" ? (
-            <div className="panel p-6 text-sm text-slate-400">Halaman audio sedang disiapkan.</div>
+            <AudioView project={project} setProject={setProject} />
           ) : step === "export" ? (
             <div className="panel p-6 text-sm text-slate-400">Review + Export CapCut segera hadir.</div>
           ) : (
