@@ -30,6 +30,8 @@ export const api = {
   confirm: (id) => request("POST", `/api/projects/${id}/confirm`),
   pause: (id) => request("POST", `/api/projects/${id}/pause`),
   resume: (id) => request("POST", `/api/projects/${id}/resume`),
+  clearImages: (id) => request("POST", `/api/projects/${id}/clear-images`),
+  testRun: (id, limit = 2) => request("POST", `/api/projects/${id}/test-run?limit=${limit}`),
   retry: (id, i) => request("POST", `/api/projects/${id}/scenes/${i}/retry`),
   narrationOptions: (id, i, body) => request("POST", `/api/projects/${id}/scenes/${i}/narration-options`, body),
   setNarration: (id, i, narration) => request("PUT", `/api/projects/${id}/scenes/${i}/narration`, { narration }),

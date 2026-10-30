@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import config, settings, storage
+from . import config, db, settings, storage
 from .models import Project, Scene, now_iso
 from .styles import build_prompt
 
@@ -88,6 +88,11 @@ def next_job() -> dict | None:
                     continue
                 if s.image_status == "pending":
                     s.image_status, s.error, s.started_at = "generating", None, now_iso()
+                    if getattr(p, "test_limit", None) is not None:
+                        p.test_limit -= 1
+                        if p.test_limit <= 0:
+                            p.status = "paused"
+                            p.test_limit = None
                     storage.save(p)
                     job = {
                         "project_id": p.id,
@@ -156,6 +161,10 @@ def save_result(project_id: str, index: int, image_base64: str, mime: str, note:
     data = base64.b64decode(image_base64)
     cfg = settings.load()
     is_hd = hd or (cfg.resolution == "1K" and len(data) > 100_000)
+    try:
+        db.save_snapshot_record(project_id, index, data, mime, flow_src=flow_src, note=note)
+    except Exception:
+        pass
     return _store(project_id, index, EXT.get(mime, "png"), lambda f: f.write_bytes(data), note, hd=is_hd, flow_src=flow_src)
 
 
@@ -169,6 +178,10 @@ def save_result_file(project_id: str, index: int, path: str, note: str | None = 
     ext = src.suffix.lstrip(".").lower() or "png"
     if ext not in ("png", "jpg", "jpeg", "webp"):
         raise ValueError(f"not an image: {src.name}")
+    try:
+        db.save_snapshot_record(project_id, index, src.read_bytes(), f"image/{ext}", note=note)
+    except Exception:
+        pass
     return _store(project_id, index, ext, lambda f: shutil.move(src, f), note, hd=True)
 
 
@@ -213,4 +226,52 @@ def request_redownload(project_id: str, indices: list[int] | None = None) -> Pro
             if p.status == "done":
                 p.status = "generating"
             storage.save(p)
+        return p
+
+
+def clear_images(project_id: str) -> Project:
+    """Delete all generated image files for a project, clear SQLite snapshots, and reset scenes to fresh pending state."""
+    with storage.lock:
+        p = storage.load(project_id)
+        if p is None:
+            raise LookupError("project not found")
+        d = storage.project_dir(project_id)
+        for pattern in ("scene_*.*", "*.png", "*.jpg", "*.jpeg", "*.webp"):
+            for f in d.glob(pattern):
+                if f.is_file():
+                    try:
+                        f.unlink()
+                    except Exception:
+                        pass
+        dl_dir = config.DOWNLOADS_DIR / "stickman-flow" / project_id
+        if dl_dir.exists():
+            shutil.rmtree(dl_dir, ignore_errors=True)
+        for s in p.scenes:
+            s.image_status = "pending"
+            s.image_file = None
+            s.flow_src = None
+            s.error = None
+            s.started_at = None
+            s.image_hd = None
+            s.job_kind = "generate"
+        p.status = "paused"
+        p.test_limit = None
+        _refresh_status(p)
+        storage.save(p)
+        try:
+            db.clear_project_snapshots(project_id)
+        except Exception:
+            pass
+        return p
+
+
+def set_test_run(project_id: str, limit: int = 2) -> Project:
+    """Set project into test run mode: generates at most `limit` scenes then auto-pauses."""
+    with storage.lock:
+        p = storage.load(project_id)
+        if p is None:
+            raise LookupError("project not found")
+        p.test_limit = max(1, limit)
+        p.status = "generating"
+        storage.save(p)
         return p

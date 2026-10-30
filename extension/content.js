@@ -911,6 +911,12 @@ async function workerLoop() {
             generated += 1;
             await notifyIfProjectDone(cfg, job.project_id);
             currentJob = null;
+            if (cfg.session_limit_images > 0 && generated >= cfg.session_limit_images) {
+              log(`Batas sesi tercapai (${generated} gambar). Worker dimatikan otomatis.`, "ok");
+              notify(cfg, "Batas sesi tercapai", `${generated} gambar selesai dibuat. Worker OFF otomatis.`, job.project_id);
+              await chrome.storage.local.set({ enabled: false });
+              break;
+            }
             continue;
           }
         }

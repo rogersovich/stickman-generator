@@ -1,12 +1,13 @@
 import io
 import zipfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
-from . import config, jobs, settings, storage
+from . import config, db, jobs, settings, storage
 from .models import (
     CreateProjectIn,
     ImportMarkdownIn,
@@ -24,7 +25,19 @@ from .parser import parse_markdown_prompts
 from .story import StoryError, generate_story, rewrite_narration, scene_count_for
 from .styles import build_prompt, load_styles
 
-app = FastAPI(title="Stickman Generator")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init_db()
+    for p in storage.list_all():
+        try:
+            db.save_project_record(p)
+        except Exception:
+            pass
+    yield
+
+
+app = FastAPI(title="Stickman Generator", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^(http://(localhost|127\.0\.0\.1)(:\d+)?|chrome-extension://.*)$",
@@ -308,6 +321,23 @@ def resume(project_id: str):
         if p.status in ("paused", "done") and any(s.image_status != "done" for s in p.scenes):
             p.status = "generating"
             storage.save(p)
+        return _out(p)
+
+
+@app.post("/api/projects/{project_id}/clear-images")
+def clear_project_images(project_id: str):
+    with storage.lock:
+        p = _get(project_id)
+        if any(s.image_status == "generating" for s in p.scenes):
+            raise HTTPException(409, "Ada scene yang sedang di-generate. Jeda dulu worker sebelum membersihkan gambar.")
+        p = jobs.clear_images(project_id)
+        return _out(p)
+
+
+@app.post("/api/projects/{project_id}/test-run")
+def test_run(project_id: str, limit: int = 2):
+    with storage.lock:
+        p = jobs.set_test_run(project_id, limit=limit)
         return _out(p)
 
 

@@ -41,6 +41,7 @@ class Project(BaseModel):
     style_id: str
     language: str = "Indonesia"
     status: ProjectStatus = "draft"
+    test_limit: int | None = None
     scenes: list[Scene] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)

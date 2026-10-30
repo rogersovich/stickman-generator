@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Clock, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, WandSparkles, X, Zap } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Clock, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, Trash2, WandSparkles, X, Zap } from "lucide-react";
 import { api } from "./api.js";
 import NarrationEditor from "./NarrationEditor.jsx";
 import { useDialog } from "./ui.jsx";
@@ -227,6 +227,31 @@ export default function ProgressView({ project, setProject }) {
   const redownload = (i) => act(() => api.redownload(id, i))();
   const lowRes = project.scenes.filter((s) => s.needs_hd).length;
 
+  async function handleClearImages() {
+    const ok = await dialog.confirm({
+      title: "Bersihkan Semua Gambar?",
+      message: "Semua file gambar yang sudah ter-generate pada project ini akan dihapus dari folder output dan semua frame kembali ke status awal (pending / fresh). Naskah cerita dan kode prompt tetap utuh.",
+      confirmLabel: "Bersihkan Semua Gambar",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const updated = await api.clearImages(id);
+      setProject(updated);
+    } catch (e) {
+      await dialog.alert({ title: "Gagal membersihkan gambar", message: e.message });
+    }
+  }
+
+  async function handleTestRun(count = 2) {
+    try {
+      const updated = await api.testRun(id, count);
+      setProject(updated);
+    } catch (e) {
+      await dialog.alert({ title: "Gagal memulai test run", message: e.message });
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Telemetry & Studio Dock */}
@@ -291,11 +316,25 @@ export default function ProgressView({ project, setProject }) {
               <Play size={14} /> Lanjutkan Worker
             </button>
           )}
+          <button
+            className="btn-ghost text-xs border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+            onClick={() => handleTestRun(2)}
+            title="Generate hanya 2 frame untuk testing, lalu otomatis jeda"
+          >
+            <Zap size={14} className="text-amber-400" /> Test (2 Frame)
+          </button>
           {lowRes > 0 && (
             <button className="btn-primary text-xs" onClick={act(() => api.redownloadAll(id))}>
               <Download size={14} /> Ambil 2K Semua ({lowRes})
             </button>
           )}
+          <button
+            className="btn-ghost text-xs text-rose-400 hover:text-rose-300 hover:border-rose-500/40"
+            onClick={handleClearImages}
+            title="Hapus semua gambar yang sudah digenerate agar antrean kembali fresh dari frame #1"
+          >
+            <Trash2 size={14} /> Bersihkan Gambar (Fresh)
+          </button>
           <a className="btn-ghost ml-auto text-xs" href={api.downloadUrl(id)}>
             <FileArchive size={14} className="text-amber-400" /> Unduh Paket ZIP
           </a>

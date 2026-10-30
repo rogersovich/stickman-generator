@@ -113,6 +113,25 @@ $("openFlowTab").onclick = async () => {
   }
 };
 
+$("testTwoBtn").onclick = async () => {
+  const s = await load();
+  try {
+    const res = await fetch(`${s.backendUrl}/api/settings`);
+    if (res.ok) {
+      const cfg = await res.json();
+      cfg.session_limit_images = 2;
+      await fetch(`${s.backendUrl}/api/settings`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(cfg),
+      });
+    }
+  } catch {}
+  await chrome.storage.local.set({ enabled: true, pausing: false });
+  const newLog = [...s.log, { t: Date.now(), level: "info", text: "🧪 Mode Test aktif: worker akan berhenti otomatis setelah 2 gambar." }];
+  chrome.storage.local.set({ log: newLog });
+};
+
 $("toggle").onclick = async () => {
   const s = await load();
   if (s.enabled) {

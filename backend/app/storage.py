@@ -4,7 +4,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config
+from . import config, db
 from .models import Project, now_iso
 
 lock = threading.RLock()
@@ -33,6 +33,10 @@ def save(project: Project) -> None:
         tmp = d / "project.json.tmp"
         tmp.write_text(project.model_dump_json(indent=2), encoding="utf-8")
         tmp.replace(d / "project.json")
+        try:
+            db.save_project_record(project)
+        except Exception:
+            pass
 
 
 def load(project_id: str) -> Project | None:
@@ -63,3 +67,7 @@ def delete(project_id: str) -> None:
         dl_dir = config.DOWNLOADS_DIR / "stickman-flow" / project_id
         if dl_dir.exists():
             shutil.rmtree(dl_dir, ignore_errors=True)
+        try:
+            db.delete_project_record(project_id)
+        except Exception:
+            pass
