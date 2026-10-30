@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel
 
 from . import audio, config, db, jobs, routes_audio, settings, storage
 from .models import (
@@ -474,3 +475,32 @@ def post_release(project_id: str, index: int):
     except LookupError as e:
         raise HTTPException(404, str(e))
     return {"ok": True}
+
+
+class CapCutExportIn(BaseModel):
+    drafts_dir: str | None = None
+    ken_burns: bool = True
+    zoom_ratio: float = 1.15
+    enable_transitions: bool = True
+    transition_duration: float = 0.5
+
+
+@app.post("/api/projects/{project_id}/export-capcut")
+def export_capcut(project_id: str, body: CapCutExportIn = CapCutExportIn()):
+    try:
+        from .capcut_service import export_project_to_capcut
+        return export_project_to_capcut(
+            project_id=project_id,
+            drafts_dir=body.drafts_dir,
+            ken_burns=body.ken_burns,
+            zoom_ratio=body.zoom_ratio,
+            enable_transitions=body.enable_transitions,
+            transition_duration=body.transition_duration,
+        )
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Gagal ekspor CapCut: {e}")
+

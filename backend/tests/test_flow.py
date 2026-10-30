@@ -418,3 +418,24 @@ def test_files_rejects_backslash(client):
     # on Windows "\\" is a path separator, so a name containing it could escape the project folder
     (config.OUTPUT_DIR / p["id"] / "sub\\file.png").write_bytes(b"x")
     assert client.get(f"/files/{p['id']}/sub%5Cfile.png").status_code == 404
+
+
+def test_export_capcut_draft(client, tmp_path):
+    from pathlib import Path
+    p = client.post("/api/projects", json={"topic": "Stickman Hero", "scene_count": 2}).json()
+    client.post(f"/api/projects/{p['id']}/confirm")
+    client.get("/api/jobs/next")
+    # Save image for scene 0
+    img_data = _png(1376, 768)
+    client.post(f"/api/jobs/{p['id']}/0/result", json={"image_base64": base64.b64encode(img_data).decode(), "mime": "image/png"})
+    
+    # Export CapCut to tmp drafts dir
+    drafts_dir = tmp_path / "capcut_drafts"
+    res = client.post(f"/api/projects/{p['id']}/export-capcut", json={"drafts_dir": str(drafts_dir)})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert data["exported_images"] == 1
+    assert Path(data["draft_path"]).exists()
+    assert (Path(data["draft_path"]) / "draft_info.json").exists()
+

@@ -49,5 +49,6 @@ export const api = {
   ttsStatus: () => request("GET", "/api/tts/status"),
   audioUrl: (id, file, v) => `/files/${id}/${file}?v=${encodeURIComponent(v ?? "")}`,
   downloadUrl: (id) => `/api/projects/${id}/download`,
+  exportCapCut: (id, options = {}) => request("POST", `/api/projects/${id}/export-capcut`, options),
   fileUrl: (id, name, v) => `/files/${id}/${name}?v=${encodeURIComponent(v ?? "")}`,
 };

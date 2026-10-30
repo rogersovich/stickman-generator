@@ -1,12 +1,35 @@
-import { AlertCircle, AudioLines, CheckCircle2, Clapperboard, Download, ExternalLink, FileArchive, Image as ImageIcon, Music, Sparkles } from "lucide-react";
+import {
+  AlertCircle,
+  AudioLines,
+  CheckCircle2,
+  Clapperboard,
+  Download,
+  ExternalLink,
+  FileArchive,
+  Film,
+  FolderCheck,
+  Image as ImageIcon,
+  Loader2,
+  Music,
+  Sliders,
+  Sparkles,
+  Zap,
+} from "lucide-react";
 import { useState } from "react";
 import { api } from "./api.js";
 import { go } from "./App.jsx";
+import { Toggle, useDialog } from "./ui.jsx";
 
 const fmtSec = (s) => `${s.toFixed(1).replace(".", ",")} dtk`;
 
 export default function ExportView({ project }) {
+  const dialog = useDialog();
   const [filter, setFilter] = useState("all"); // 'all' | 'ready' | 'missing'
+  const [exporting, setExporting] = useState(false);
+  const [kenBurns, setKenBurns] = useState(true);
+  const [transitions, setTransitions] = useState(true);
+  const [draftResult, setDraftResult] = useState(null);
+
   const id = project.id;
   const scenes = project.scenes;
   const total = scenes.length;
@@ -29,6 +52,39 @@ export default function ExportView({ project }) {
       return true;
     });
 
+  async function handleExportCapCut() {
+    if (imagesDone === 0) {
+      await dialog.alert({
+        title: "Belum Ada Gambar",
+        message: "Generate gambar terlebih dahulu di tab 1 · Gambar sebelum mengekspor ke CapCut.",
+      });
+      return;
+    }
+
+    setExporting(true);
+    setDraftResult(null);
+    try {
+      const res = await api.exportCapCut(id, {
+        ken_burns: kenBurns,
+        zoom_ratio: 1.15,
+        enable_transitions: transitions,
+        transition_duration: 0.5,
+      });
+      setDraftResult(res);
+      await dialog.alert({
+        title: "🎉 Draft CapCut Berhasil Dibuat!",
+        message: `Project "${res.draft_name}" sudah otomatis masuk ke aplikasi CapCut Desktop Anda (${res.exported_images} gambar, ${res.exported_audios} audio klip, total durasi ~${res.total_duration_s} detik). Silakan buka aplikasi CapCut Desktop untuk melihat timeline!`,
+      });
+    } catch (e) {
+      await dialog.alert({
+        title: "Gagal Ekspor CapCut",
+        message: e.message,
+      });
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header & Export Status Panel */}
@@ -40,19 +96,68 @@ export default function ExportView({ project }) {
               Review & Ekspor Video
             </h1>
             <p className="mt-1 text-sm text-slate-400">
-              Langkah 3: Tinjau keselarasan visual gambar dan klip audio narasi per adegan sebelum dirakit ke CapCut atau video editor.
+              Langkah 3: Tinjau keselarasan visual & audio, lalu ekspor langsung menjadi <b>Draft CapCut Desktop</b> dengan animasi Ken Burns atau unduh paket ZIP.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={handleExportCapCut}
+              disabled={exporting || imagesDone === 0}
+              className="btn-primary text-xs flex items-center gap-2 px-4 py-2 font-bold shadow-lg shadow-amber-500/20"
+            >
+              {exporting ? <Loader2 size={15} className="animate-spin" /> : <Film size={15} />}
+              {exporting ? "Mengekspor ke CapCut…" : "⚡ Ekspor Draft CapCut"}
+            </button>
             <a
               href={api.downloadUrl(id)}
-              className="btn-primary text-xs flex items-center gap-2 px-4 py-2"
+              className="btn-ghost text-xs flex items-center gap-2 px-3 py-2 text-slate-300"
               download
+              title="Unduh semua file gambar & audio dalam arsip ZIP"
             >
-              <FileArchive size={15} /> Unduh ZIP Lengkap ({total} Adegan)
+              <FileArchive size={14} /> Unduh ZIP
             </a>
           </div>
         </div>
+
+        {/* CapCut Options Bar */}
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-300">
+              <Sliders size={16} />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-slate-100">Pengaturan Ekspor CapCut Desktop</div>
+              <div className="text-[11px] text-slate-400">Otomatis menaruh gambar & audio narasi di timeline CapCut dengan durasi yang tepat.</div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-5">
+            <Toggle
+              checked={kenBurns}
+              onChange={setKenBurns}
+              label="Animasi Ken Burns (Zoom/Pan)"
+            />
+            <Toggle
+              checked={transitions}
+              onChange={setTransitions}
+              label="Transisi Dinamis Antar-Adegan"
+            />
+          </div>
+        </div>
+
+        {/* Draft result pill if exported */}
+        {draftResult && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-200 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <FolderCheck size={16} className="text-emerald-400 shrink-0" />
+              <span>
+                Draft CapCut aktif: <b>{draftResult.draft_name}</b> ({draftResult.exported_images} gambar, {draftResult.exported_audios} audio)
+              </span>
+            </div>
+            <span className="font-mono text-[11px] text-slate-400 truncate max-w-md" title={draftResult.draft_path}>
+              {draftResult.draft_path}
+            </span>
+          </div>
+        )}
 
         {/* Bento Stats */}
         <div className="grid gap-3 sm:grid-cols-4">
@@ -95,19 +200,6 @@ export default function ExportView({ project }) {
               {readyDone} <span className="text-xs text-slate-500 font-normal">/ {total}</span>
             </div>
           </div>
-        </div>
-
-        {/* Info Box */}
-        <div className="rounded-xl border border-[#292e3b] bg-[#161920]/60 p-4 text-xs text-slate-300 space-y-2">
-          <div className="flex items-center gap-2 font-semibold text-amber-300">
-            <Sparkles size={14} /> Isi File Paket ZIP Ekspor:
-          </div>
-          <ul className="grid gap-1.5 sm:grid-cols-2 text-slate-400">
-            <li>• File gambar urut: <code className="text-slate-300">scene_001.png</code>, <code className="text-slate-300">scene_002.png</code> ...</li>
-            <li>• File audio narasi urut: <code className="text-slate-300">audio/scene_001.wav</code> ...</li>
-            <li>• Transkrip naskah lengkap: <code className="text-slate-300">narration.txt</code></li>
-            <li>• Metadata adegan & durasi: <code className="text-slate-300">project.json</code></li>
-          </ul>
         </div>
 
         {/* Filter Bar */}
