@@ -12,6 +12,7 @@ from .capcut import CapCutDraftGenerator
 def export_project_to_capcut(
     project_id: str,
     drafts_dir: Optional[str] = None,
+    project_name: Optional[str] = None,
     ken_burns: bool = True,
     zoom_ratio: float = 1.15,
     enable_transitions: bool = True,
@@ -55,7 +56,8 @@ def export_project_to_capcut(
 
     gen = CapCutDraftGenerator(projects_dir=drafts_dir)
 
-    safe_name = re.sub(r'[\\/*?:"<>|]', "", p.title or p.id).strip() or p.id
+    base_name = project_name.strip() if project_name and project_name.strip() else (p.title or p.id)
+    safe_name = re.sub(r'[\\/*?:"<>|]', "", base_name).strip() or p.id
     # Clean draft name with date-time suffix
     draft_name = f"{safe_name}_{time.strftime('%Y%m%d_%H%M%S')}"
     ratio = p.format if p.format in ("16:9", "9:16") else "16:9"

@@ -13,7 +13,7 @@ import {
   RadioGroup,
   Switch,
 } from "@headlessui/react";
-import { AlertTriangle, Check, ChevronsUpDown, Info } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronsUpDown, Info } from "lucide-react";
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 
 // options: [{ value, label, desc? }] or plain strings
@@ -115,10 +115,20 @@ export function DialogProvider({ children }) {
   const api = useRef({
     confirm: (opts) => open("confirm", opts),
     alert: (opts) => open("alert", opts),
+    success: (opts) => open("alert", { tone: "success", ...opts }),
   }).current;
 
   const danger = state?.danger;
-  const Icon = danger || state?.kind === "alert" ? AlertTriangle : Info;
+  const tone = state?.tone ?? (danger ? "error" : state?.kind === "alert" ? "warning" : "info");
+  const Icon = tone === "success" ? CheckCircle2 : tone === "error" || tone === "warning" ? AlertTriangle : Info;
+  const toneClasses =
+    tone === "success"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+      : tone === "error"
+      ? "border-red-500/30 bg-red-500/10 text-red-400"
+      : tone === "warning"
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+      : "border-sky-500/30 bg-sky-500/10 text-sky-400";
 
   return (
     <DialogContext.Provider value={api}>
@@ -137,7 +147,7 @@ export function DialogProvider({ children }) {
           >
             <div className="flex gap-3.5">
               <div
-                className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${danger || state?.kind === "alert" ? "border-red-500/30 bg-red-500/10 text-red-400" : "border-amber-500/30 bg-amber-500/10 text-amber-400"}`}
+                className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${toneClasses}`}
               >
                 <Icon size={20} />
               </div>

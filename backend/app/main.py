@@ -479,6 +479,7 @@ def post_release(project_id: str, index: int):
 
 class CapCutExportIn(BaseModel):
     drafts_dir: str | None = None
+    project_name: str | None = None
     ken_burns: bool = True
     zoom_ratio: float = 1.15
     enable_transitions: bool = True
@@ -492,6 +493,7 @@ def export_capcut(project_id: str, body: CapCutExportIn = CapCutExportIn()):
         return export_project_to_capcut(
             project_id=project_id,
             drafts_dir=body.drafts_dir,
+            project_name=body.project_name,
             ken_burns=body.ken_burns,
             zoom_ratio=body.zoom_ratio,
             enable_transitions=body.enable_transitions,

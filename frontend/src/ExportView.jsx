@@ -4,30 +4,22 @@ import {
   CheckCircle2,
   Clapperboard,
   Download,
-  ExternalLink,
   FileArchive,
   Film,
-  FolderCheck,
   Image as ImageIcon,
-  Loader2,
   Music,
-  Sliders,
-  Sparkles,
-  Zap,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { go } from "./App.jsx";
-import { Toggle, useDialog } from "./ui.jsx";
+import CapCutExportModal from "./CapCutExportModal.jsx";
 
 const fmtSec = (s) => `${s.toFixed(1).replace(".", ",")} dtk`;
 
 export default function ExportView({ project }) {
-  const dialog = useDialog();
   const [filter, setFilter] = useState("all"); // 'all' | 'ready' | 'missing'
-  const [exporting, setExporting] = useState(false);
-  const [kenBurns, setKenBurns] = useState(true);
-  const [transitions, setTransitions] = useState(true);
+  const [capcutModalOpen, setCapcutModalOpen] = useState(false);
   const [draftResult, setDraftResult] = useState(null);
 
   const id = project.id;
@@ -43,6 +35,14 @@ export default function ExportView({ project }) {
   const totalMin = Math.floor(totalAudioSec / 60);
   const totalRemSec = Math.round(totalAudioSec % 60);
 
+  // Auto-dismiss the inline notification banner after 10 seconds
+  useEffect(() => {
+    if (draftResult) {
+      const timer = setTimeout(() => setDraftResult(null), 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [draftResult]);
+
   const filteredScenes = scenes
     .map((s, index) => ({ s, index }))
     .filter(({ s }) => {
@@ -51,39 +51,6 @@ export default function ExportView({ project }) {
       if (filter === "missing") return !isReady;
       return true;
     });
-
-  async function handleExportCapCut() {
-    if (imagesDone === 0) {
-      await dialog.alert({
-        title: "Belum Ada Gambar",
-        message: "Generate gambar terlebih dahulu di tab 1 · Gambar sebelum mengekspor ke CapCut.",
-      });
-      return;
-    }
-
-    setExporting(true);
-    setDraftResult(null);
-    try {
-      const res = await api.exportCapCut(id, {
-        ken_burns: kenBurns,
-        zoom_ratio: 1.15,
-        enable_transitions: transitions,
-        transition_duration: 0.5,
-      });
-      setDraftResult(res);
-      await dialog.alert({
-        title: "🎉 Draft CapCut Berhasil Dibuat!",
-        message: `Project "${res.draft_name}" sudah otomatis masuk ke aplikasi CapCut Desktop Anda (${res.exported_images} gambar, ${res.exported_audios} audio klip, total durasi ~${res.total_duration_s} detik). Silakan buka aplikasi CapCut Desktop untuk melihat timeline!`,
-      });
-    } catch (e) {
-      await dialog.alert({
-        title: "Gagal Ekspor CapCut",
-        message: e.message,
-      });
-    } finally {
-      setExporting(false);
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -101,61 +68,40 @@ export default function ExportView({ project }) {
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <button
-              onClick={handleExportCapCut}
-              disabled={exporting || imagesDone === 0}
+              onClick={() => setCapcutModalOpen(true)}
               className="btn-primary text-xs flex items-center gap-2 px-4 py-2 font-bold shadow-lg shadow-amber-500/20"
+              title="Buka opsi ekspor dan rakit draft ke CapCut Desktop"
             >
-              {exporting ? <Loader2 size={15} className="animate-spin" /> : <Film size={15} />}
-              {exporting ? "Mengekspor ke CapCut…" : "⚡ Ekspor Draft CapCut"}
+              <Film size={15} /> ⚡ Ekspor Draft CapCut
             </button>
             <a
               href={api.downloadUrl(id)}
               className="btn-ghost text-xs flex items-center gap-2 px-3 py-2 text-slate-300"
               download
-              title="Unduh semua file gambar & audio dalam arsip ZIP"
+              title="Unduh seluruh file gambar & audio dalam arsip ZIP"
             >
               <FileArchive size={14} /> Unduh ZIP
             </a>
           </div>
         </div>
 
-        {/* CapCut Options Bar */}
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-300">
-              <Sliders size={16} />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-100">Pengaturan Ekspor CapCut Desktop</div>
-              <div className="text-[11px] text-slate-400">Otomatis menaruh gambar & audio narasi di timeline CapCut dengan durasi yang tepat.</div>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-5">
-            <Toggle
-              checked={kenBurns}
-              onChange={setKenBurns}
-              label="Animasi Ken Burns (Zoom/Pan)"
-            />
-            <Toggle
-              checked={transitions}
-              onChange={setTransitions}
-              label="Transisi Dinamis Antar-Adegan"
-            />
-          </div>
-        </div>
-
-        {/* Draft result pill if exported */}
+        {/* Dismissable Inline Notification Banner */}
         {draftResult && (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-200 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <FolderCheck size={16} className="text-emerald-400 shrink-0" />
-              <span>
-                Draft CapCut aktif: <b>{draftResult.draft_name}</b> ({draftResult.exported_images} gambar, {draftResult.exported_audios} audio)
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200 flex items-center justify-between gap-3 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+              <span className="truncate">
+                Draft CapCut siap: <b className="text-slate-100 font-mono">{draftResult.draft_name}</b> ({draftResult.exported_images} gambar, {draftResult.exported_audios} audio) — buka aplikasi CapCut Desktop untuk melihat timeline.
               </span>
             </div>
-            <span className="font-mono text-[11px] text-slate-400 truncate max-w-md" title={draftResult.draft_path}>
-              {draftResult.draft_path}
-            </span>
+            <button
+              onClick={() => setDraftResult(null)}
+              className="rounded-lg p-1 text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-100 transition shrink-0"
+              title="Tutup notifikasi"
+              aria-label="Tutup notifikasi"
+            >
+              <X size={14} />
+            </button>
           </div>
         )}
 
@@ -358,6 +304,14 @@ export default function ExportView({ project }) {
           })}
         </ul>
       </div>
+
+      {/* CapCut Export Settings & Confirmation Modal */}
+      <CapCutExportModal
+        open={capcutModalOpen}
+        onClose={() => setCapcutModalOpen(false)}
+        project={project}
+        onExported={(res) => setDraftResult(res)}
+      />
     </div>
   );
 }
