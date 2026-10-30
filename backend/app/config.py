@@ -40,3 +40,19 @@ DELAY_BETWEEN_IMAGES_MAX = float(os.getenv("DELAY_BETWEEN_IMAGES_MAX", "60"))
 REDOWNLOAD_DELAY_MIN = float(os.getenv("REDOWNLOAD_DELAY_MIN", "3"))
 REDOWNLOAD_DELAY_MAX = float(os.getenv("REDOWNLOAD_DELAY_MAX", "8"))
 JOB_TIMEOUT_SECONDS = float(os.getenv("JOB_TIMEOUT_SECONDS", "300"))
+
+# narration audio (TTS)
+VOICES_DIR = _path(os.getenv("VOICES_DIR", "data/voices"))
+# shared secret for TTS workers on other machines; empty = only workers on this machine (localhost)
+TTS_WORKER_TOKEN = os.getenv("TTS_WORKER_TOKEN", "")
+# local: every worker takes jobs | auto: this machine's worker skips models an online remote worker has
+# remote: this machine's worker never takes jobs
+TTS_WORKER_MODE = os.getenv("TTS_WORKER_MODE", "auto")
+if TTS_WORKER_MODE not in ("local", "auto", "remote"):
+    TTS_WORKER_MODE = "auto"
+# voice library of manhwa-recap-studio, imported once from the voice library screen
+LEGACY_STUDIO_DB = Path(
+    os.path.expanduser(os.getenv("LEGACY_STUDIO_DB", "~/Documents/Coding/Python/manhwa-recap-studio/data/studio.db"))
+)
+TTS_LEASE_SECONDS = 120  # a generating scene goes back to the queue when its worker is silent this long
+TTS_SEEN_SECONDS = 30  # a worker counts as online when it called in this recently
