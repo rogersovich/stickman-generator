@@ -365,3 +365,49 @@ prompt 4
     j4 = client.get("/api/jobs/next")
     assert j4.status_code == 200 and j4.json()["scene_index"] == 3
 
+
+
+def test_clear_images_ignores_orphaned_generating_scene(client):
+    from app import storage
+
+    p = client.post("/api/projects", json={"topic": "x", "scene_count": 2}).json()
+    client.post(f"/api/projects/{p['id']}/confirm")
+    client.get("/api/jobs/next")
+
+    # a job just handed out: the worker may still be on it
+    assert client.post(f"/api/projects/{p['id']}/clear-images").status_code == 409
+
+    # worker died without releasing the job long ago: nothing is running anymore
+    proj = storage.load(p["id"])
+    proj.scenes[0].started_at = "2020-01-01T00:00:00+00:00"
+    storage.save(proj)
+    r = client.post(f"/api/projects/{p['id']}/clear-images")
+    assert r.status_code == 200
+    assert all(s["image_status"] == "pending" for s in r.json()["scenes"])
+
+
+def _png(w, h):
+    import struct
+
+    return b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", w, h) + b"\x08\x02\x00\x00\x00"
+
+
+def _jpeg(w, h):
+    import struct
+
+    app0 = b"\xff\xe0" + struct.pack(">H", 16) + b"JFIF\x00" + bytes(9)
+    sof = b"\xff\xc0" + struct.pack(">HBHHB", 11, 8, h, w, 1) + bytes(3)
+    return b"\xff\xd8" + app0 + sof + b"\xff\xd9"
+
+
+@pytest.mark.parametrize(
+    "data, label",
+    [(_png(286, 512), "thumbnail"), (_png(1376, 768), "1K"), (_jpeg(768, 1376), "1K"), (_jpeg(2752, 1536), "2K")],
+)
+def test_scene_reports_real_resolution(client, data, label):
+    p = client.post("/api/projects", json={"topic": "x", "scene_count": 1}).json()
+    client.post(f"/api/projects/{p['id']}/confirm")
+    client.get("/api/jobs/next")
+    mime = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
+    client.post(f"/api/jobs/{p['id']}/0/result", json={"image_base64": base64.b64encode(data).decode(), "mime": mime})
+    assert client.get(f"/api/projects/{p['id']}").json()["scenes"][0]["image_res"] == label

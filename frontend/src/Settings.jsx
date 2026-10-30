@@ -256,7 +256,7 @@ export default function Settings() {
                 {
                   value: "batch_end",
                   label: "Download di Akhir (Direkomendasikan)",
-                  desc: "Fokus generate dulu semua scene secara paralel (cepat & aman). Setelah semua selesai, worker mengunduh file 1K/2K secara urut tanpa takut kejar-kejaran.",
+                  desc: "Gambar 1K langsung disalin dari halaman Flow begitu selesai, tanpa klik menu. Untuk 2K: generate dulu semua scene secara paralel, lalu worker mengunduh file 2K satu per satu di akhir.",
                 },
                 {
                   value: "immediate",
@@ -295,7 +295,7 @@ export default function Settings() {
 
       {/* Floating Save Bar */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#292e3b] bg-[#0e1015]/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3.5">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3.5">
           <span className={`text-xs font-mono ${message?.error ? "text-red-400" : dirty ? "text-amber-400 flex items-center gap-1.5" : "text-slate-400 flex items-center gap-1.5"}`}>
             {dirty && <span className="size-2 rounded-full bg-amber-400 animate-pulse" />}
             {!dirty && !message?.error && <span className="size-2 rounded-full bg-emerald-400" />}

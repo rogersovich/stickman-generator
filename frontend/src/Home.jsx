@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Clapperboard, Clock, FileCode, FileText, Film, Layers, Loader2, Sparkles, Trash2, UploadCloud } from "lucide-react";
+import { Clapperboard, Film, Loader2, Trash2, UploadCloud } from "lucide-react";
 import { api } from "./api.js";
 import { go } from "./App.jsx";
 import { confirmDelete } from "./deleteProject.js";
-import { ChoiceCards, Select, useDialog } from "./ui.jsx";
-
-const DEFAULT_DURATION = { "9:16": 60, "16:9": 540 };
+import { ChoiceCards, useDialog } from "./ui.jsx";
 
 const STATUS_LABEL = {
   draft: "Draft",
@@ -25,9 +23,6 @@ export default function Home() {
   const dialog = useDialog();
   const fileInputRef = useRef(null);
 
-  // Tab mode: 'import' (primary default) vs 'ai' (generate from prompt idea)
-  const [activeTab, setActiveTab] = useState("import");
-
   // Import state
   const [markdownText, setMarkdownText] = useState("");
   const [parsedPreview, setParsedPreview] = useState(null);
@@ -40,40 +35,9 @@ export default function Home() {
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
-
-  // AI Story generation state
-  const [styles, setStyles] = useState([]);
-  const [secondsPerScene, setSecondsPerScene] = useState(7);
-  const [models, setModels] = useState([]);
-  const [fallbacks, setFallbacks] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [aiForm, setAiForm] = useState({
-    topic: "",
-    format: "16:9",
-    duration_sec: 540,
-    scene_count: "",
-    style_id: "doodle-stickman",
-    language: "Indonesia",
-    model: "",
-  });
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState("");
 
   useEffect(() => {
-    api.styles().then(setStyles).catch(() => {});
-    api
-      .config()
-      .then((c) => {
-        setSecondsPerScene(c.seconds_per_scene);
-        setModels(c.models);
-        setFallbacks(c.fallback_models);
-        setAiForm((f) => ({ ...f, model: f.model || c.model }));
-      })
-      .catch(() => {});
-    api
-      .settings()
-      .then((s) => setAiForm((f) => ({ ...f, style_id: s.default_style_id, language: s.default_language })))
-      .catch(() => {});
     api.projects().then(setProjects).catch(() => {});
   }, []);
 
@@ -175,7 +139,7 @@ export default function Home() {
         format: importFormat,
         auto_confirm: autoConfirm,
       });
-      go(`/p/${p.id}`);
+      go(`/project/${p.id}`);
     } catch (err) {
       setImportError(err.message);
     } finally {
@@ -183,64 +147,10 @@ export default function Home() {
     }
   }
 
-  // AI generation submit
-  const autoCount = Math.max(1, Math.round(aiForm.duration_sec / secondsPerScene));
-  const setAi = (key) => (e) => setAiForm({ ...aiForm, [key]: e.target.value });
-
-  async function submitAi(e) {
-    e.preventDefault();
-    setAiLoading(true);
-    setAiError("");
-    try {
-      const p = await api.create({
-        ...aiForm,
-        duration_sec: Number(aiForm.duration_sec),
-        scene_count: aiForm.scene_count ? Number(aiForm.scene_count) : null,
-      });
-      go(`/p/${p.id}`);
-    } catch (err) {
-      setAiError(err.message);
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
       {/* Main Studio Workbench */}
       <div className="space-y-5">
-        {/* Tab Selection */}
-        <div className="flex rounded-xl border border-[#292e3b] bg-[#161920] p-1 text-sm font-medium">
-          <button
-            onClick={() => setActiveTab("import")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 transition-colors ${
-              activeTab === "import"
-                ? "bg-amber-500 text-slate-950 font-semibold shadow-xs"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <FileCode size={16} />
-            <span>Import Markdown Prompts</span>
-            <span className={`text-[10px] rounded px-1.5 py-0.2 font-mono ${activeTab === "import" ? "bg-black/20 text-slate-950" : "bg-[#292e3b] text-amber-300"}`}>
-              Rekomendasi
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("ai")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 transition-colors ${
-              activeTab === "ai"
-                ? "bg-amber-500 text-slate-950 font-semibold shadow-xs"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Sparkles size={16} />
-            <span>Generate dengan AI (9router)</span>
-          </button>
-        </div>
-
-        {/* Tab 1: Import Markdown Prompts */}
-        {activeTab === "import" && (
           <form
             onSubmit={submitImport}
             onDragOver={(e) => e.preventDefault()}
@@ -437,96 +347,7 @@ export default function Home() {
                 : `Buat Project (${parsedPreview?.total_scenes ?? 0} Adegan) & Buka Storyboard`}
             </button>
           </form>
-        )}
 
-        {/* Tab 2: AI Story generation (Fallback / Legacy) */}
-        {activeTab === "ai" && (
-          <form onSubmit={submitAi} className="panel p-6 space-y-5">
-            <div>
-              <h2 className="text-lg font-bold tracking-tight text-slate-100">Susun Cerita Otomatis dengan AI</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Tulis topik bebas. 9router akan mengarang cerita dan prompt gambar per adegan.</p>
-            </div>
-
-            <div>
-              <label className="label">Topik / Ide Cerita</label>
-              <textarea
-                className="input min-h-24 leading-relaxed resize-y"
-                required
-                placeholder="Contoh: Mengapa suku pedalaman di pulau terpencil menolak kontak dengan dunia luar..."
-                value={aiForm.topic}
-                onChange={setAi("topic")}
-              />
-            </div>
-
-            <div>
-              <label className="label">Format Video</label>
-              <ChoiceCards
-                className="grid-cols-2"
-                value={aiForm.format}
-                onChange={(f) => setAiForm({ ...aiForm, format: f, duration_sec: DEFAULT_DURATION[f] })}
-                options={[
-                  { value: "16:9", label: "16:9 Horizontal", desc: "YouTube Landscape (±8-10 mnt)" },
-                  { value: "9:16", label: "9:16 Vertikal", desc: "Shorts, Reels, TikTok (±60 dtk)" },
-                ]}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label">Target Durasi (detik)</label>
-                <div className="relative">
-                  <input
-                    className="input font-mono"
-                    type="number"
-                    min={10}
-                    max={1800}
-                    value={aiForm.duration_sec}
-                    onChange={setAi("duration_sec")}
-                  />
-                  <span className="absolute right-3.5 top-2.5 font-mono text-xs text-slate-400">dtk</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="label">Jumlah Adegan</label>
-                <input
-                  className="input font-mono"
-                  type="number"
-                  min={1}
-                  max={200}
-                  placeholder={`Otomatis: ${autoCount} adegan`}
-                  value={aiForm.scene_count}
-                  onChange={setAi("scene_count")}
-                />
-              </div>
-
-              <div>
-                <label className="label">Style Gambar</label>
-                <Select
-                  value={aiForm.style_id}
-                  onChange={(v) => setAiForm({ ...aiForm, style_id: v })}
-                  options={styles.map((s) => ({ value: s.id, label: s.name }))}
-                />
-              </div>
-
-              <div>
-                <label className="label">Model LLM (9router)</label>
-                <Select value={aiForm.model} onChange={(v) => setAiForm({ ...aiForm, model: v })} options={models} />
-              </div>
-            </div>
-
-            {aiError && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-sm text-red-300">
-                {aiError}
-              </div>
-            )}
-
-            <button className="btn-primary w-full py-2.5 text-sm" disabled={aiLoading || !aiForm.topic.trim()}>
-              {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              {aiLoading ? "Menyusun draf naskah… (bisa 1–3 menit)" : "Generate Naskah dengan AI"}
-            </button>
-          </form>
-        )}
       </div>
 
       {/* Sidebar: Project Reel History */}
@@ -548,7 +369,7 @@ export default function Home() {
             {projects.map((p) => (
               <li key={p.id} className="group relative">
                 <button
-                  onClick={() => go(`/p/${p.id}`)}
+                  onClick={() => go(`/project/${p.id}`)}
                   className="card w-full p-3.5 pr-10 text-left transition-all hover:border-[#3d4455] hover:bg-[#232833] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
                 >
                   <div className="truncate text-sm font-semibold text-slate-100 group-hover:text-amber-300 transition-colors">

@@ -309,7 +309,7 @@ export default function DraftEditor({ project, onConfirmed }) {
 
       {/* Floating Action Dock */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#292e3b] bg-[#0e1015]/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3.5">
           <div className="flex items-center gap-2 text-xs">
             {error ? (
               <span className="font-medium text-red-400">{error}</span>

@@ -27,13 +27,13 @@
   },
   "typing_mode": "fast",
   "concurrent_generate": true,
-  "max_concurrency": 5,
+  "max_concurrency": 3,
   "break_every_images": 0,
   "break_minutes": {
     "min": 3.0,
     "max": 5.0
   },
-  "session_limit_images": 2,
+  "session_limit_images": 0,
   "resolution": "1K",
   "download_mode": "batch_end",
   "notifications": true,

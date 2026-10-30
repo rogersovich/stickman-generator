@@ -57,10 +57,11 @@ def _get(project_id: str) -> Project:
 
 
 def _out(p: Project) -> dict:
-    """Project as JSON, plus whether each scene is still only a low-res thumbnail."""
+    """Project as JSON, plus each scene's real image resolution and whether it is still only a low-res thumbnail."""
     data = p.model_dump()
     for scene, out in zip(p.scenes, data["scenes"]):
         out["needs_hd"] = jobs.needs_hd(p.id, scene)
+        out["image_res"] = jobs.image_res(p.id, scene)
     return data
 
 
@@ -226,6 +227,8 @@ def delete_project(project_id: str):
     """Delete the project folder (project.json + all images)."""
     with storage.lock:
         p = _get(project_id)
+        # a worker that died mid-job never releases its scenes: don't let them block forever
+        jobs.expire_stale(p)
         if any(s.image_status == "generating" for s in p.scenes):
             raise HTTPException(409, "a scene is being generated right now: pause the project or turn the worker OFF first")
         storage.delete(project_id)
@@ -328,6 +331,8 @@ def resume(project_id: str):
 def clear_project_images(project_id: str):
     with storage.lock:
         p = _get(project_id)
+        # a worker that died mid-job never releases its scenes: don't let them block forever
+        jobs.expire_stale(p)
         if any(s.image_status == "generating" for s in p.scenes):
             raise HTTPException(409, "Ada scene yang sedang di-generate. Jeda dulu worker sebelum membersihkan gambar.")
         p = jobs.clear_images(project_id)

@@ -172,7 +172,7 @@ async function hashImage({ url }) {
 
 // ---------- Chrome notifications (clicking one opens the project in the web app) ----------
 
-const notificationLinks = new Map(); // notificationId -> app hash path
+const notificationLinks = new Map(); // notificationId -> app path
 
 async function notify({ title, message, projectId }) {
   const id = await chrome.notifications.create({
@@ -182,13 +182,13 @@ async function notify({ title, message, projectId }) {
     message,
     priority: 1,
   });
-  if (projectId) notificationLinks.set(id, `/p/${projectId}`);
+  if (projectId) notificationLinks.set(id, `/project/${projectId}`);
   return id;
 }
 
 chrome.notifications.onClicked.addListener(async (id) => {
   const { appUrl } = await settings();
-  chrome.tabs.create({ url: `${appUrl}/#${notificationLinks.get(id) ?? "/"}` });
+  chrome.tabs.create({ url: `${appUrl}${notificationLinks.get(id) ?? "/"}` });
   chrome.notifications.clear(id);
   notificationLinks.delete(id);
 });
