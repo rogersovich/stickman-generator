@@ -1,5 +1,6 @@
 const DEFAULTS = {
   enabled: false,
+  pausing: false,
   backendUrl: "http://localhost:8000",
   appUrl: "http://localhost:5173",
   worker: null,
@@ -24,7 +25,7 @@ function renderState() {
   const w = state.worker;
   const live = state.enabled && w ? w : { state: "off", label: "Worker OFF" };
   $("dot").className = `dot ${live.state}`;
-  $("stateLabel").textContent = live.state === "job" ? "Sedang bekerja" : live.label;
+  $("stateLabel").textContent = live.state === "job" ? "Sedang bekerja" : live.state === "pause" ? "Menjeda…" : live.label;
 
   let meta = "";
   if (live.until) meta = `sisa ${duration(live.until - Date.now())}`;
@@ -74,8 +75,27 @@ function renderLog() {
 }
 
 function render() {
-  $("toggle").textContent = `Worker: ${state.enabled ? "ON" : "OFF"}`;
-  $("toggle").className = state.enabled ? "on" : "ghost";
+  const isEnabled = state.enabled;
+  const isPausing = state.pausing;
+
+  if (!isEnabled) {
+    $("toggle").textContent = "Worker: OFF";
+    $("toggle").className = "ghost";
+    $("pauseBtn").style.display = "none";
+  } else if (isPausing) {
+    $("toggle").textContent = "Stop Paksa (OFF)";
+    $("toggle").className = "danger";
+    $("pauseBtn").style.display = "";
+    $("pauseBtn").textContent = "▶ Lanjutkan";
+    $("pauseBtn").className = "on";
+  } else {
+    $("toggle").textContent = "Worker: ON";
+    $("toggle").className = "on";
+    $("pauseBtn").style.display = "";
+    $("pauseBtn").textContent = "⏸ Jeda (Tunggu Selesai)";
+    $("pauseBtn").className = "amber";
+  }
+
   if (document.activeElement !== $("backendUrl")) $("backendUrl").value = state.backendUrl;
   if (document.activeElement !== $("appUrl")) $("appUrl").value = state.appUrl;
   renderState();
@@ -95,13 +115,25 @@ $("openFlowTab").onclick = async () => {
 
 $("toggle").onclick = async () => {
   const s = await load();
-  await chrome.storage.local.set({ enabled: !s.enabled });
-  if (!s.enabled) {
+  if (s.enabled) {
+    await chrome.storage.local.set({ enabled: false, pausing: false });
+  } else {
+    await chrome.storage.local.set({ enabled: true, pausing: false });
     const tabs = await chrome.tabs.query({ url: ["https://flow.google.com/*", "https://labs.google/*"] });
     if (!tabs.length) {
       const log = [...s.log, { t: Date.now(), level: "warn", text: "Buka tab Google Flow dulu, lalu buka sebuah project" }];
       chrome.storage.local.set({ log });
     }
+  }
+};
+
+$("pauseBtn").onclick = async () => {
+  const s = await load();
+  if (!s.enabled) return;
+  if (s.pausing) {
+    await chrome.storage.local.set({ pausing: false });
+  } else {
+    await chrome.storage.local.set({ pausing: true });
   }
 };
 

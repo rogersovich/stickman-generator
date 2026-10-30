@@ -77,6 +77,10 @@ async function isEnabled() {
   return (await chrome.storage.local.get("enabled")).enabled === true;
 }
 
+async function isPausing() {
+  return (await chrome.storage.local.get("pausing")).pausing === true;
+}
+
 async function loadWorkerSettings() {
   try {
     return { ...DEFAULT_WORKER_SETTINGS, ...(await api("GET", "/api/settings")) };
@@ -635,9 +639,10 @@ async function workerLoop() {
 
       // Check if prompt input is ready to accept a new prompt (input exists, visible, and not containing an unsent prompt)
       const isInputReady = input && isVisible(input) && inputText(input).length < 20;
+      const pausing = await isPausing();
 
-      // 1. SUBMIT NEXT PROMPT IF UNDER CONCURRENCY LIMIT AND INPUT IS READY
-      if (inFlight.length < maxConcurrency && isInputReady) {
+      // 1. SUBMIT NEXT PROMPT IF UNDER CONCURRENCY LIMIT AND INPUT IS READY (ONLY IF NOT PAUSING)
+      if (!pausing && inFlight.length < maxConcurrency && isInputReady) {
         let job = null;
         try {
           job = await api("GET", "/api/jobs/next");
@@ -793,12 +798,21 @@ async function workerLoop() {
         }
       }
 
-      // 3. IDLE / WAITING STATE
+      // 3. IDLE / WAITING STATE OR COMPLETE PAUSE
       if (inFlight.length === 0) {
+        if (pausing) {
+          log("Semua proses in-flight selesai. Worker dijeda (OFF) ✓", "ok");
+          await chrome.storage.local.set({ enabled: false, pausing: false });
+          break;
+        }
         setState("waiting", "Menunggu job dari app…");
         if (!(await idle(rand(...TIMING.idlePoll)))) break;
       } else {
-        setState("job", `${inFlight.length} gambar sedang diproses Flow secara paralel…`);
+        if (pausing) {
+          setState("pause", `Menjeda: menunggu ${inFlight.length} gambar selesai…`);
+        } else {
+          setState("job", `${inFlight.length} gambar sedang diproses Flow secara paralel…`);
+        }
         if (!(await idle(1200))) break;
       }
     }
@@ -810,6 +824,7 @@ async function workerLoop() {
     }
     inFlight = [];
     await send({ type: "detach" }).catch(() => {});
+    await chrome.storage.local.set({ pausing: false });
     chrome.storage.local.set({ worker: { state: "off", label: "Worker OFF", since: Date.now() } });
     log("Worker OFF");
   }

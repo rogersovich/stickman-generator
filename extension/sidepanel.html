@@ -16,13 +16,15 @@
       .primary { background: var(--yellow); color: #18181b; }
       .ghost { background: var(--line); color: var(--text); }
       .on { background: var(--green); color: #052e16; }
+      .amber { background: var(--amber); color: #451a03; }
+      .danger { background: #dc2626; color: #fff; }
       .small { padding: 4px 8px; font-size: 11px; font-weight: 500; flex: 0 0 auto; }
       .card { background: var(--card); border-radius: 10px; padding: 10px 12px; }
       .state { display: flex; align-items: flex-start; gap: 8px; }
       .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex: 0 0 auto; background: var(--muted); }
       .dot.job { background: var(--yellow); animation: pulse 1.2s infinite; }
       .dot.waiting, .dot.delay { background: var(--blue); }
-      .dot.break { background: var(--amber); }
+      .dot.break, .dot.pause { background: var(--amber); animation: pulse 1.2s infinite; }
       .dot.problem { background: var(--red); }
       @keyframes pulse { 50% { opacity: 0.35; } }
       .label { font-weight: 600; word-break: break-word; }
@@ -54,7 +56,10 @@
       <button id="openApp" class="primary">Buka App</button>
       <button id="openSettings" class="ghost">⚙ Pengaturan</button>
     </div>
-    <button id="toggle" class="ghost">Worker: OFF</button>
+    <div class="row" style="margin-top: 2px;">
+      <button id="toggle" class="ghost">Worker: OFF</button>
+      <button id="pauseBtn" class="amber" style="display: none;">⏸ Jeda (Tunggu Selesai)</button>
+    </div>
     <button id="openFlowTab" class="ghost small" style="width: 100%; border: 1px dashed #facc15; color: #facc15; padding: 7px; margin-top: 2px;">⚡ Buka 3 Tab Flow Sekaligus (Paralel)</button>
 
     <div class="card">
