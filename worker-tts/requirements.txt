@@ -1,0 +1,15 @@
+# TTS worker dependencies. Separate venv from the backend: worker-tts/.venv-ml (Python 3.10).
+#
+# Pins follow manhwa-recap-studio's worker, where torch 2.8 is proven on Apple MPS (8 GB M2)
+# and on CUDA. Do not bump torch/numpy without re-testing generation on the Mac.
+# On Windows, setup-worker.ps1 installs the CUDA build of torch first (cu128).
+torch==2.8.0
+torchaudio==2.8.0
+numpy==1.26.4
+soundfile>=0.12
+num2words==0.5.14
+huggingface_hub
+python-dotenv>=1.0
+omnivoice==0.2.1
+pytest>=8
+# voxcpm is installed by the setup scripts on its own (unpinned, like the reference project)
