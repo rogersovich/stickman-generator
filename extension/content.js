@@ -317,18 +317,31 @@ function isSameCard(a, b) {
   return false;
 }
 
-// Flow is still generating while the send button shows a stop icon (■) or a "35%" progress badge is visible.
-function isGenerating() {
-  const stopButton = [...document.querySelectorAll('button, [role="button"]')].some(
-    (b) => isVisible(b) && (/^stop$/i.test(b.querySelector("mat-icon")?.textContent?.trim() || "") || /hentikan|berhenti|stop gen/i.test(b.getAttribute("aria-label") || ""))
-  );
-  if (stopButton) return true;
+function countGeneratingCards() {
+  let count = 0;
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     const node = walker.currentNode;
-    if (/^\s*\d{1,3}\s*%\s*$/.test(node.textContent) && node.parentElement && isVisible(node.parentElement)) return true;
+    if (/^\s*\d{1,3}\s*%\s*$/.test(node.textContent || "") && node.parentElement && isVisible(node.parentElement)) {
+      count++;
+    }
   }
-  return false;
+  if (count === 0) {
+    const spinners = [...document.querySelectorAll('[role="progressbar"], mat-spinner, .mat-mdc-progress-spinner')].filter(isVisible);
+    count = spinners.length;
+  }
+  const stopButton = [...document.querySelectorAll('button, [role="button"]')].some(
+    (b) => isVisible(b) && (/^stop$/i.test(b.querySelector("mat-icon")?.textContent?.trim() || "") || /hentikan|berhenti|stop gen/i.test(b.getAttribute("aria-label") || ""))
+  );
+  if (count === 0 && stopButton) {
+    count = 1;
+  }
+  return count;
+}
+
+// Flow is still generating while the send button shows a stop icon (■) or a "35%" progress badge is visible.
+function isGenerating() {
+  return countGeneratingCards() > 0;
 }
 
 function imageSrcs() {
@@ -621,6 +634,14 @@ async function workerLoop() {
   lastStateKey = "";
   inFlight = [];
   completedSrcs = imageSrcs();
+  try {
+    const activeProjects = await api("GET", "/api/projects");
+    for (const p of activeProjects || []) {
+      for (const s of p.scenes || []) {
+        if (s.flow_src) completedSrcs.add(s.flow_src);
+      }
+    }
+  } catch {}
   let generated = 0; // new images made this session
   let failStreak = 0; // consecutive failed jobs
   log("Worker ON", "ok");
@@ -640,9 +661,11 @@ async function workerLoop() {
       // Check if prompt input is ready to accept a new prompt (input exists, visible, and not containing an unsent prompt)
       const isInputReady = input && isVisible(input) && inputText(input).length < 20;
       const pausing = await isPausing();
+      const activeGenerating = countGeneratingCards();
+      const hasSlot = inFlight.length < maxConcurrency && activeGenerating < maxConcurrency;
 
-      // 1. SUBMIT NEXT PROMPT IF UNDER CONCURRENCY LIMIT AND INPUT IS READY (ONLY IF NOT PAUSING)
-      if (!pausing && inFlight.length < maxConcurrency && isInputReady) {
+      // 1. SUBMIT NEXT PROMPT ONLY IF NOT PAUSING AND UNDER CONCURRENCY LIMIT
+      if (!pausing && hasSlot && isInputReady) {
         let job = null;
         try {
           job = await api("GET", "/api/jobs/next");
@@ -698,93 +721,98 @@ async function workerLoop() {
 
       // 2. CHECK FOR COMPLETED IMAGES FROM IN-FLIGHT GENERATIONS
       if (inFlight.length > 0) {
-        const freshImgs = [...document.images].filter((img) => {
-          const src = img.currentSrc || img.src;
-          return (
-            src &&
-            !completedSrcs.has(src) &&
-            img.complete &&
-            Math.max(img.naturalWidth, img.naturalHeight) >= SELECTORS.minImageSize &&
-            isVisible(img) &&
-            !isTileGenerating(img)
-          );
-        });
+        const oldest = inFlight[0];
+        const elapsed = Date.now() - oldest.submittedAt;
 
-        if (freshImgs.length > 0) {
-          const target = inFlight.shift();
-          const job = target.job;
-          // In Google Flow, new cards are prepended to the top of the grid.
-          // freshImgs.at(-1) is the earliest created card among fresh items, matching FIFO inFlight queue.
-          const freshImg = freshImgs.length > 1 ? freshImgs.at(-1) : freshImgs[0];
-          const src = freshImg.currentSrc || freshImg.src;
-          completedSrcs.add(src);
+        // Flow generation takes at least 7 seconds. Ignore too-early checks to prevent matching old DOM images.
+        if (elapsed >= 7000) {
+          const freshImgs = [...document.images].filter((img) => {
+            const src = img.currentSrc || img.src;
+            return (
+              src &&
+              !completedSrcs.has(src) &&
+              img.complete &&
+              Math.max(img.naturalWidth, img.naturalHeight) >= SELECTORS.minImageSize &&
+              isVisible(img) &&
+              !isTileGenerating(img)
+            );
+          });
 
-          // Mark any other image elements that belong to this same card/tile as completed too
-          for (const other of freshImgs) {
-            if (other === freshImg || isSameCard(other, freshImg)) {
-              const s = other.currentSrc || other.src;
-              if (s) completedSrcs.add(s);
+          if (freshImgs.length > 0) {
+            const target = inFlight.shift();
+            const job = target.job;
+            // In Google Flow, new cards are prepended to the top of the grid.
+            // freshImgs[0] is the top-most card in DOM order (the newest completed card).
+            const freshImg = freshImgs[0];
+            const src = freshImg.currentSrc || freshImg.src;
+            completedSrcs.add(src);
+
+            // Mark any other image elements that belong to this same card/tile as completed too
+            for (const other of freshImgs) {
+              if (other === freshImg || isSameCard(other, freshImg)) {
+                const s = other.currentSrc || other.src;
+                if (s) completedSrcs.add(s);
+              }
             }
-          }
 
-          currentJob = {
-            label: `Scene ${job.scene_index + 1}/${job.total}`,
-            project: job.project_title || job.project_id,
-            scene: job.scene_index + 1,
-            total: job.total,
-            kind: "generate",
-            startedAt: target.submittedAt,
-          };
+            currentJob = {
+              label: `Scene ${job.scene_index + 1}/${job.total}`,
+              project: job.project_title || job.project_id,
+              scene: job.scene_index + 1,
+              total: job.total,
+              kind: "generate",
+              startedAt: target.submittedAt,
+            };
 
-          const path = `/api/jobs/${job.project_id}/${job.scene_index}`;
-          const isImmediate = cfg.download_mode === "immediate";
+            const path = `/api/jobs/${job.project_id}/${job.scene_index}`;
+            const isImmediate = cfg.download_mode === "immediate";
 
-          if (isImmediate && cfg.resolution !== "thumbnail") {
-            // Immediate mode: download directly via menu per scene
-            step(`download ${cfg.resolution}…`);
-            let note = null;
-            try {
-              const file = await downloadViaMenu(src, job, cfg.resolution);
-              await api("POST", `${path}/result-file`, { path: file });
-            } catch (e) {
-              if (e instanceof WorkerStopped) throw e;
-              note = `resolusi rendah: download ${cfg.resolution} gagal: ${e.message}`;
+            if (isImmediate && cfg.resolution !== "thumbnail") {
+              // Immediate mode: download directly via menu per scene
+              step(`download ${cfg.resolution}…`);
+              let note = null;
+              try {
+                const file = await downloadViaMenu(src, job, cfg.resolution);
+                await api("POST", `${path}/result-file`, { path: file });
+              } catch (e) {
+                if (e instanceof WorkerStopped) throw e;
+                note = `resolusi rendah: download ${cfg.resolution} gagal: ${e.message}`;
+                try {
+                  const image = await grabImage(src);
+                  await api("POST", `${path}/result`, { image_base64: image.base64, mime: image.mime, flow_src: src, note });
+                } catch (err) {
+                  log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
+                  await api("POST", `${path}/fail`, { error: err.message }).catch(() => {});
+                }
+              }
+            } else {
+              // Batch-end mode (or thumbnail): grab image instantly (<200ms) without menu clicks
+              step(cfg.resolution === "1K" ? "menyimpan 1K instan…" : "menyimpan pratinjau…");
               try {
                 const image = await grabImage(src);
-                await api("POST", `${path}/result`, { image_base64: image.base64, mime: image.mime, flow_src: src, note });
+                await api("POST", `${path}/result`, {
+                  image_base64: image.base64,
+                  mime: image.mime,
+                  flow_src: src,
+                  note: cfg.resolution === "1K" ? "1K asli" : "pratinjau siap 2K",
+                });
               } catch (err) {
                 log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
                 await api("POST", `${path}/fail`, { error: err.message }).catch(() => {});
               }
             }
-          } else {
-            // Batch-end mode (or thumbnail): grab image instantly (<200ms) without menu clicks
-            step(cfg.resolution === "1K" ? "menyimpan 1K instan…" : "menyimpan pratinjau…");
-            try {
-              const image = await grabImage(src);
-              await api("POST", `${path}/result`, {
-                image_base64: image.base64,
-                mime: image.mime,
-                flow_src: src,
-                note: cfg.resolution === "1K" ? "1K asli" : "pratinjau siap 2K",
-              });
-            } catch (err) {
-              log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
-              await api("POST", `${path}/fail`, { error: err.message }).catch(() => {});
-            }
-          }
 
-          const secs = Math.round((Date.now() - target.submittedAt) / 1000);
-          log(`${currentJob.label} tersimpan ✓ · ${secs} dtk (${inFlight.length} masih berjalan)`, "ok");
-          failStreak = 0;
-          generated += 1;
-          await notifyIfProjectDone(cfg, job.project_id);
-          currentJob = null;
-          continue;
+            const secs = Math.round((Date.now() - target.submittedAt) / 1000);
+            log(`${currentJob.label} tersimpan ✓ · ${secs} dtk (${inFlight.length} masih berjalan)`, "ok");
+            failStreak = 0;
+            generated += 1;
+            await notifyIfProjectDone(cfg, job.project_id);
+            currentJob = null;
+            continue;
+          }
         }
 
         // Check if oldest in-flight job timed out
-        const oldest = inFlight[0];
         if (Date.now() - oldest.submittedAt > cfg.image_timeout_sec * 1000) {
           inFlight.shift();
           const job = oldest.job;
@@ -799,19 +827,20 @@ async function workerLoop() {
       }
 
       // 3. IDLE / WAITING STATE OR COMPLETE PAUSE
-      if (inFlight.length === 0) {
+      if (inFlight.length === 0 && activeGenerating === 0) {
         if (pausing) {
-          log("Semua proses in-flight selesai. Worker dijeda (OFF) ✓", "ok");
+          log("Semua proses selesai. Worker OFF otomatis (Jeda selesai) ✓", "ok");
           await chrome.storage.local.set({ enabled: false, pausing: false });
           break;
         }
         setState("waiting", "Menunggu job dari app…");
         if (!(await idle(rand(...TIMING.idlePoll)))) break;
       } else {
+        const activeCount = Math.max(inFlight.length, activeGenerating);
         if (pausing) {
-          setState("pause", `Menjeda: menunggu ${inFlight.length} gambar selesai…`);
+          setState("pause", `Menjeda: menunggu ${activeCount} proses selesai…`);
         } else {
-          setState("job", `${inFlight.length} gambar sedang diproses Flow secara paralel…`);
+          setState("job", `${activeCount} gambar sedang diproses Flow secara paralel…`);
         }
         if (!(await idle(1200))) break;
       }
