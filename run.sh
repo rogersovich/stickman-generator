@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start backend (FastAPI :8000) + frontend (Vite :5173) together. Ctrl+C stops both.
+# Start backend (FastAPI :8000) + frontend (Vite :5173) + optional TTS worker together. Ctrl+C stops all.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -13,8 +13,15 @@ done
 [ -f backend/.env ] || { cp backend/.env.example backend/.env; echo "Created backend/.env - fill in the 9router settings."; }
 [ -d frontend/node_modules ] || (cd frontend && npm install)
 
-(cd backend && uv run uvicorn app.main:app --reload --port 8000 2>&1 | sed -u 's/^/[backend]  /') &
+HOST="${HOST:-127.0.0.1}"
+START_TTS_WORKER="${START_TTS_WORKER:-1}"
+
+(cd backend && uv run uvicorn app.main:app --reload --host "$HOST" --port 8000 2>&1 | sed -u 's/^/[backend]  /') &
 (cd frontend && npm run dev -- --strictPort 2>&1 | sed -u 's/^/[frontend] /') &
+
+if [ "$START_TTS_WORKER" != "0" ] && [ -x worker-tts/.venv-ml/bin/python ]; then
+  (worker-tts/.venv-ml/bin/python worker-tts/main.py 2>&1 | sed -u 's/^/[tts]       /') &
+fi
 
 trap 'echo; echo "Stopping..."; kill 0' INT TERM EXIT
 
