@@ -6,12 +6,13 @@ export default function ProjectSteps({ project, step }) {
   const total = project.scenes.length;
   const imagesDone = project.scenes.filter((s) => s.image_status === "done").length;
   const audioDone = project.scenes.filter((s) => s.audio_status === "done" && !s.audio_stale).length;
+  const readyDone = project.scenes.filter((s) => s.image_status === "done" && s.audio_status === "done" && !s.audio_stale).length;
   const stale = project.scenes.filter((s) => s.audio_stale).length;
 
   const steps = [
     { key: "images", n: 1, label: "Gambar", icon: Image, meta: `${imagesDone}/${total}` },
     { key: "audio", n: 2, label: "Audio", icon: AudioLines, meta: `${audioDone}/${total}`, warn: stale ? `${stale} basi` : null },
-    { key: "export", n: 3, label: "Export", icon: Clapperboard, meta: "Segera", disabled: true },
+    { key: "export", n: 3, label: "Export", icon: Clapperboard, meta: `${readyDone}/${total}` },
   ];
 
   return (
