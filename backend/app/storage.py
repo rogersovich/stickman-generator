@@ -60,3 +60,6 @@ def delete(project_id: str) -> None:
         if not (d / "project.json").exists():
             raise LookupError("project not found")
         shutil.rmtree(d)
+        dl_dir = config.DOWNLOADS_DIR / "stickman-flow" / project_id
+        if dl_dir.exists():
+            shutil.rmtree(dl_dir, ignore_errors=True)
