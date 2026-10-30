@@ -125,6 +125,11 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
 async function awaitDownload({ timeoutMs = 180000 }) {
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
+    const pendingIdx = expectedQueue.findIndex((e) => e.id == null && Date.now() - e.armedAt > 30000);
+    if (pendingIdx !== -1) {
+      expectedQueue.splice(pendingIdx, 1);
+      throw new Error("download dari Flow tidak dimulai dalam 30 dtk (menu Download tidak terklik?)");
+    }
     const idx = expectedQueue.findIndex((e) => e.id != null);
     if (idx !== -1) {
       const exp = expectedQueue[idx];

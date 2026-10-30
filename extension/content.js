@@ -297,24 +297,67 @@ async function pastePrompt(el, text) {
   }
 }
 
-function isTileGenerating(img) {
-  let node = img.parentElement;
-  for (let depth = 0; depth < 4 && node; depth++, node = node.parentElement) {
-    if (node.querySelector?.('[role="progressbar"], mat-spinner, .mat-mdc-progress-spinner')) return true;
-    const spans = node.querySelectorAll("span, div, p");
-    for (const el of spans) {
-      if (isVisible(el) && /^\s*\d{1,3}\s*%\s*$/.test(el.textContent || "")) return true;
+// Finds the individual card element enclosing an image, stopping before multi-card containers (grid/gallery)
+function findTileCard(img) {
+  let card = img.parentElement;
+  let curr = img.parentElement;
+  while (curr && curr !== document.body) {
+    const parent = curr.parentElement;
+    if (!parent || parent === document.body) break;
+    // Check if parent holds sibling big images outside of curr
+    const siblingBigImgs = [...parent.querySelectorAll("img")].filter(
+      (i) => !curr.contains(i) && isVisible(i) && Math.max(i.naturalWidth || i.width || 0, i.naturalHeight || i.height || 0) >= SELECTORS.minImageSize
+    );
+    if (siblingBigImgs.length > 0) {
+      card = curr;
+      break;
     }
+    card = curr;
+    curr = parent;
+  }
+  return card;
+}
+
+function isTileGenerating(img) {
+  const card = findTileCard(img);
+  if (!card) return false;
+  if (card.querySelector('[role="progressbar"], mat-spinner, .mat-mdc-progress-spinner')) return true;
+  for (const el of card.querySelectorAll("span, div, p")) {
+    if (isVisible(el) && /^\s*\d{1,3}\s*%\s*$/.test(el.textContent || "")) return true;
   }
   return false;
 }
 
 function isSameCard(a, b) {
-  let p = a.parentElement;
-  for (let i = 0; i < 5 && p; i++, p = p.parentElement) {
-    if (p.contains(b)) return true;
+  if (a === b) return true;
+  const cardA = findTileCard(a);
+  const cardB = findTileCard(b);
+  return Boolean(cardA && cardB && cardA === cardB);
+}
+
+function extractPromptKeywords(promptText) {
+  if (!promptText) return [];
+  const descMatch = promptText.match(/SCENE DESCRIPTION\s*([^\n]+)/i) || promptText.match(/visual focus:\s*([^\n.]+)/i);
+  const source = descMatch ? descMatch[1] : promptText;
+  return source
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !["image", "create", "hand", "drawn", "stickman", "minimalist", "illustration", "scene", "shot"].includes(w))
+    .slice(0, 8);
+}
+
+function cardMatchesJob(img, job) {
+  const card = findTileCard(img);
+  if (!card || !job?.prompt) return false;
+  const text = (card.innerText + " " + (img.alt || "") + " " + (card.getAttribute("aria-label") || "")).toLowerCase();
+  const kws = extractPromptKeywords(job.prompt);
+  if (kws.length === 0) return false;
+  let matches = 0;
+  for (const kw of kws) {
+    if (text.includes(kw)) matches++;
   }
-  return false;
+  return matches >= 2;
 }
 
 function countGeneratingCards() {
@@ -421,17 +464,14 @@ async function waitForEl(find, ms) {
 
 // The ⋮ button that appears on an image tile while hovered.
 function findTileMenuButton(img) {
-  let node = img.parentElement;
-  for (let depth = 0; depth < 7 && node; depth++, node = node.parentElement) {
-    const btn = [...node.querySelectorAll('button, [role="button"]')].find(
-      (b) =>
-        isVisible(b) &&
-        (/^more_(vert|horiz)$/.test(b.querySelector("mat-icon")?.textContent?.trim() || "") ||
-          /lainnya|more|opsi|options/i.test(b.getAttribute("aria-label") || ""))
-    );
-    if (btn) return btn;
-  }
-  return null;
+  const card = findTileCard(img);
+  if (!card) return null;
+  return [...card.querySelectorAll('button, [role="button"]')].find(
+    (b) =>
+      isVisible(b) &&
+      (/^more_(vert|horiz)$/.test(b.querySelector("mat-icon")?.textContent?.trim() || "") ||
+        /lainnya|more|opsi|options/i.test(b.getAttribute("aria-label") || ""))
+  ) || null;
 }
 
 function findMenuItem(re) {
@@ -689,6 +729,7 @@ async function workerLoop() {
             try {
               await runRedownload(job, cfg);
               log(`${currentJob.label} (ambil ulang) tersimpan ✓`, "ok");
+              await notifyIfProjectDone(cfg, job.project_id);
             } catch (e) {
               log(`${currentJob.label} ambil ulang gagal: ${e.message}`, "error");
               await api("POST", `/api/jobs/${job.project_id}/${job.scene_index}/fail`, { error: e.message }).catch(() => {});
@@ -704,20 +745,28 @@ async function workerLoop() {
               kind: "generate",
               startedAt: Date.now(),
             };
-            step("menempel prompt (paste instan)…");
-            await pastePrompt(input, job.prompt);
-            const beforeSendMs = Math.max(200, cfg.before_send ? secRange(cfg.before_send) : 500);
-            await sleep(beforeSendMs);
-            checkStopped();
-            step("mengirim prompt…");
-            await submitPrompt(input);
-            inFlight.push({ job, submittedAt: Date.now() });
-            log(`Scene ${job.scene_index + 1}/${job.total} terkirim! (${inFlight.length}/${maxConcurrency} sedang diproses)`, "ok");
-            setState("job", `${inFlight.length} gambar sedang diproses Flow secara paralel…`);
-            // Breathing room after submitting so Flow mounts the new card cleanly before next paste
-            const interPromptMs = cfg.delay_between_images ? Math.max(1000, Math.min(secRange(cfg.delay_between_images), 3500)) : 1500;
-            await sleep(interPromptMs);
-            continue; // check immediately if another slot can be submitted!
+            try {
+              step("menempel prompt (paste instan)…");
+              await pastePrompt(input, job.prompt);
+              const beforeSendMs = Math.max(200, cfg.before_send ? secRange(cfg.before_send) : 500);
+              await sleep(beforeSendMs);
+              checkStopped();
+              step("mengirim prompt…");
+              await submitPrompt(input);
+              inFlight.push({ job, submittedAt: Date.now() });
+              log(`Scene ${job.scene_index + 1}/${job.total} terkirim! (${inFlight.length}/${maxConcurrency} sedang diproses)`, "ok");
+              setState("job", `${inFlight.length} gambar sedang diproses Flow secara paralel…`);
+              // Breathing room after submitting so Flow mounts the new card cleanly before next paste
+              const interPromptMs = cfg.delay_between_images ? Math.max(1000, Math.min(secRange(cfg.delay_between_images), 3500)) : 1500;
+              await sleep(interPromptMs);
+              continue; // check immediately if another slot can be submitted!
+            } catch (e) {
+              if (e instanceof WorkerStopped) throw e;
+              log(`${currentJob.label} gagal kirim prompt: ${e.message}`, "error");
+              await api("POST", `/api/jobs/${job.project_id}/${job.scene_index}/release`).catch(() => {});
+              currentJob = null;
+              await sleep(2500);
+            }
           }
         }
       }
@@ -742,15 +791,30 @@ async function workerLoop() {
           });
 
           if (freshImgs.length > 0) {
-            const target = inFlight.shift();
+            // Find best match: either via keyword match or oldest FIFO (oldest submitted with oldest completed card)
+            let targetIdx = -1;
+            let imgIdx = -1;
+            for (let i = 0; i < inFlight.length; i++) {
+              const matchedImgIdx = freshImgs.findIndex((img) => cardMatchesJob(img, inFlight[i].job));
+              if (matchedImgIdx !== -1) {
+                targetIdx = i;
+                imgIdx = matchedImgIdx;
+                break;
+              }
+            }
+
+            if (targetIdx === -1) {
+              targetIdx = 0;
+              imgIdx = freshImgs.length - 1; // oldest card in DOM (furthest down the feed)
+            }
+
+            const [target] = inFlight.splice(targetIdx, 1);
             const job = target.job;
-            // In Google Flow, new cards are prepended to the top of the grid.
-            // freshImgs[0] is the top-most card in DOM order (the newest completed card).
-            const freshImg = freshImgs[0];
+            const freshImg = freshImgs[imgIdx];
             const src = freshImg.currentSrc || freshImg.src;
             completedSrcs.add(src);
 
-            // Mark any other image elements that belong to this same card/tile as completed too
+            // Mark other image elements that belong to this same card/tile as completed too
             for (const other of freshImgs) {
               if (other === freshImg || isSameCard(other, freshImg)) {
                 const s = other.currentSrc || other.src;
