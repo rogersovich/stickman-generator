@@ -32,6 +32,7 @@ export const api = {
   resume: (id) => request("POST", `/api/projects/${id}/resume`),
   clearImages: (id) => request("POST", `/api/projects/${id}/clear-images`),
   testRun: (id, limit = 2) => request("POST", `/api/projects/${id}/test-run?limit=${limit}`),
+  swapScenes: (id, a, b) => request("POST", `/api/projects/${id}/swap-scenes?a=${a}&b=${b}`),
   retry: (id, i) => request("POST", `/api/projects/${id}/scenes/${i}/retry`),
   narrationOptions: (id, i, body) => request("POST", `/api/projects/${id}/scenes/${i}/narration-options`, body),
   setNarration: (id, i, narration) => request("PUT", `/api/projects/${id}/scenes/${i}/narration`, { narration }),

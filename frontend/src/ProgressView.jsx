@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Clock, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, Trash2, WandSparkles, X, Zap } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Clock, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, Trash2, WandSparkles, X, Zap } from "lucide-react";
 import { api } from "./api.js";
 import NarrationEditor from "./NarrationEditor.jsx";
 import { useDialog } from "./ui.jsx";
@@ -252,6 +252,15 @@ export default function ProgressView({ project, setProject }) {
     }
   }
 
+  async function handleSwap(a, b) {
+    try {
+      const updated = await api.swapScenes(id, a, b);
+      setProject(updated);
+    } catch (e) {
+      await dialog.alert({ title: "Gagal menukar posisi gambar", message: e.message });
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Telemetry & Studio Dock */}
@@ -456,6 +465,15 @@ export default function ProgressView({ project, setProject }) {
                     >
                       <Download size={12} /> Unduh
                     </a>
+                  )}
+                  {s.image_file && i < project.scenes.length - 1 && (
+                    <button
+                      className="btn-ghost py-1.5 px-2 text-[11px] text-amber-300 hover:text-amber-200"
+                      onClick={() => handleSwap(i, i + 1)}
+                      title={`Tukar gambar dengan Frame #${i + 2}`}
+                    >
+                      <ArrowRightLeft size={12} /> Tukar #{i + 2}
+                    </button>
                   )}
                 </div>
                 {s.needs_hd && (

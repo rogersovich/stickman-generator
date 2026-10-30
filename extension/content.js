@@ -318,6 +318,33 @@ function findTileCard(img) {
   return card;
 }
 
+function getGridContainer() {
+  const anyImg = [...document.images].find(
+    (i) => isVisible(i) && Math.max(i.naturalWidth || i.width || 0, i.naturalHeight || i.height || 0) >= SELECTORS.minImageSize
+  );
+  if (anyImg) {
+    const card = findTileCard(anyImg);
+    if (card?.parentElement) return card.parentElement;
+  }
+  const spinner = document.querySelector('[role="progressbar"], mat-spinner, .mat-mdc-progress-spinner');
+  if (spinner) {
+    let curr = spinner;
+    while (curr && curr.parentElement && curr.parentElement !== document.body) {
+      if (curr.parentElement.children.length >= 2) return curr.parentElement;
+      curr = curr.parentElement;
+    }
+  }
+  return null;
+}
+
+function getAllCards() {
+  const grid = getGridContainer();
+  if (grid) {
+    return [...grid.children].filter((el) => isVisible(el));
+  }
+  return [];
+}
+
 function isTileGenerating(img) {
   const card = findTileCard(img);
   if (!card) return false;
@@ -788,8 +815,25 @@ async function workerLoop() {
               await sleep(beforeSendMs);
               checkStopped();
               step("mengirim prompt…");
+              const cardsBefore = new Set(getAllCards());
               await submitPrompt(input);
-              inFlight.push({ job, submittedAt: Date.now() });
+              // Flow mounts the new card at index 0 of the grid: tag it with this scene's index
+              let taggedCard = null;
+              const tagDeadline = Date.now() + 3500;
+              while (Date.now() < tagDeadline) {
+                const currentCards = getAllCards();
+                taggedCard = currentCards.find((c) => !cardsBefore.has(c));
+                if (!taggedCard && currentCards.length > 0 && !currentCards[0].hasAttribute("data-stickman-scene")) {
+                  taggedCard = currentCards[0];
+                }
+                if (taggedCard) break;
+                await sleep(150);
+              }
+              if (taggedCard) {
+                taggedCard.setAttribute("data-stickman-scene", String(job.scene_index));
+                taggedCard.setAttribute("data-stickman-project", job.project_id);
+              }
+              inFlight.push({ job, submittedAt: Date.now(), card: taggedCard });
               log(`Scene ${job.scene_index + 1}/${job.total} terkirim! (${inFlight.length}/${maxConcurrency} sedang diproses)`, "ok");
               setState("job", `${inFlight.length} gambar sedang diproses Flow secara paralel…`);
               // Breathing room after submitting so Flow mounts the new card cleanly before next paste
@@ -827,21 +871,35 @@ async function workerLoop() {
           });
 
           if (freshImgs.length > 0) {
-            // Find best match: either via keyword match or oldest FIFO (oldest submitted with oldest completed card)
             let targetIdx = -1;
             let imgIdx = -1;
-            for (let i = 0; i < inFlight.length; i++) {
-              const matchedImgIdx = freshImgs.findIndex((img) => cardMatchesJob(img, inFlight[i].job));
-              if (matchedImgIdx !== -1) {
-                targetIdx = i;
-                imgIdx = matchedImgIdx;
-                break;
+
+            // 1. Exact match via data-stickman-scene attribute tag on the card
+            for (let i = 0; i < freshImgs.length; i++) {
+              const img = freshImgs[i];
+              const card = findTileCard(img);
+              const tagged = card?.getAttribute("data-stickman-scene") || card?.closest("[data-stickman-scene]")?.getAttribute("data-stickman-scene");
+              if (tagged != null) {
+                const matchInFlight = inFlight.findIndex((t) => String(t.job.scene_index) === tagged);
+                if (matchInFlight !== -1) {
+                  targetIdx = matchInFlight;
+                  imgIdx = i;
+                  break;
+                }
               }
             }
 
+            // 2. Relative position matching in grid (Flow prepends newest card at pos 0; higher pos = older submitted job)
             if (targetIdx === -1) {
-              targetIdx = 0;
-              imgIdx = freshImgs.length - 1; // oldest card in DOM (furthest down the feed)
+              const allGridCards = getAllCards();
+              const scored = freshImgs.map((img, idx) => {
+                const card = findTileCard(img);
+                const pos = allGridCards.indexOf(card) !== -1 ? allGridCards.indexOf(card) : allGridCards.indexOf(card?.parentElement);
+                return { img, idx, pos };
+              });
+              scored.sort((a, b) => b.pos - a.pos);
+              targetIdx = 0; // oldest in-flight job
+              imgIdx = scored[0].idx; // oldest card in grid
             }
 
             const [target] = inFlight.splice(targetIdx, 1);

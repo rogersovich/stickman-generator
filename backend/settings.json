@@ -33,7 +33,7 @@
     "min": 3.0,
     "max": 5.0
   },
-  "session_limit_images": 0,
+  "session_limit_images": 2,
   "resolution": "1K",
   "download_mode": "batch_end",
   "notifications": true,

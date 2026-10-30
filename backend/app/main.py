@@ -341,6 +341,35 @@ def test_run(project_id: str, limit: int = 2):
         return _out(p)
 
 
+@app.post("/api/projects/{project_id}/swap-scenes")
+def swap_scenes(project_id: str, a: int, b: int):
+    """Swap image assignment between two scenes."""
+    import time
+    with storage.lock:
+        p = _get(project_id)
+        if not (0 <= a < len(p.scenes) and 0 <= b < len(p.scenes)):
+            raise HTTPException(400, "index scene tidak valid")
+        s_a = p.scenes[a]
+        s_b = p.scenes[b]
+        d = storage.project_dir(project_id)
+        file_a = s_a.image_file
+        file_b = s_b.image_file
+        # Swap files on disk if present
+        if file_a and file_b and (d / file_a).exists() and (d / file_b).exists():
+            tmp = d / f"tmp_swap_{time.time()}.bin"
+            (d / file_a).rename(tmp)
+            (d / file_b).rename(d / file_a)
+            tmp.rename(d / file_b)
+        # Swap scene metadata
+        s_a.image_status, s_b.image_status = s_b.image_status, s_a.image_status
+        s_a.image_file, s_b.image_file = s_b.image_file, s_a.image_file
+        s_a.flow_src, s_b.flow_src = s_b.flow_src, s_a.flow_src
+        s_a.image_hd, s_b.image_hd = s_b.image_hd, s_a.image_hd
+        s_a.error, s_b.error = s_b.error, s_a.error
+        storage.save(p)
+        return _out(p)
+
+
 @app.post("/api/projects/{project_id}/scenes/{index}/retry")
 def retry_scene(project_id: str, index: int):
     with storage.lock:
