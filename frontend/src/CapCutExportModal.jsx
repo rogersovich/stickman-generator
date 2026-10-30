@@ -105,7 +105,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <DialogPanel
             transition
-            className="flex max-h-[92vh] w-full max-w-xl flex-col gap-4 rounded-2xl border border-[#292e3b] bg-[#161920] p-6 shadow-2xl duration-150 data-closed:scale-95 data-closed:opacity-0 overflow-y-auto"
+            className={`flex max-h-[92vh] w-full ${result ? "max-w-xl" : "max-w-4xl lg:max-w-5xl"} flex-col gap-4 rounded-2xl border border-[#292e3b] bg-[#161920] p-6 shadow-2xl duration-150 data-closed:scale-95 data-closed:opacity-0 overflow-y-auto`}
           >
             {result ? (
               /* --- SUCCESS VIEW --- */
@@ -254,187 +254,202 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                     </div>
                   )}
 
-                  {/* Section 1: Animasi Kamera (Zoom & Pan) */}
-                  <div className="rounded-xl border border-[#292e3b] bg-[#12141a] p-3.5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-200">Animasi Kamera (Zoom & Pan)</span>
-                      {!enableZoom && !enablePan && (
-                        <span className="text-[11px] text-slate-500 font-normal">
-                          (Dinonaktifkan / Gambar Diam)
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Checkbox Zoom & Pan */}
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label
-                        className={`flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 transition border ${
-                          enableZoom
-                            ? "bg-[#1e222b] border-amber-500/40 text-slate-100"
-                            : "border-[#292e3b]/60 hover:bg-[#1e222b]/50 text-slate-300"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={enableZoom}
-                          onChange={(e) => setEnableZoom(e.target.checked)}
-                          className="mt-0.5 size-4 accent-amber-500 cursor-pointer rounded"
-                        />
-                        <div>
-                          <span className="block text-xs font-medium text-slate-200">Animasi Zoom</span>
-                          <span className="text-[11px] text-slate-400 leading-tight block mt-0.5">
-                            Efek zoom halus (panel portrait otomatis selalu zoom in)
-                          </span>
-                        </div>
-                      </label>
-
-                      <label
-                        className={`flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 transition border ${
-                          enablePan
-                            ? "bg-[#1e222b] border-amber-500/40 text-slate-100"
-                            : "border-[#292e3b]/60 hover:bg-[#1e222b]/50 text-slate-300"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={enablePan}
-                          onChange={(e) => setEnablePan(e.target.checked)}
-                          className="mt-0.5 size-4 accent-amber-500 cursor-pointer rounded"
-                        />
-                        <div>
-                          <span className="block text-xs font-medium text-slate-200">Animasi Pan</span>
-                          <span className="text-[11px] text-slate-400 leading-tight block mt-0.5">
-                            Geser kamera halus (digabung zoom di semua panel)
-                          </span>
-                        </div>
-                      </label>
-                    </div>
-
-                    {/* Zoom Ratio Control (Visible when Zoom or Pan is enabled) */}
-                    {(enableZoom || enablePan) && (
-                      <div className="pt-2 border-t border-[#292e3b]/60 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <label htmlFor="zoom-ratio-input" className="text-xs font-medium text-slate-200 block">
-                              Intensitas Zoom (Zoom Ratio)
-                            </label>
-                            <span className="text-[11px] text-slate-400">
-                              Perbesaran maksimal panel saat animasi zoom / pan
+                  {/* Main Settings: Kanan & Kiri (Side by Side) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+                    {/* Card Kiri: Animasi Kamera (Zoom & Pan) */}
+                    <div className="rounded-xl border border-[#292e3b] bg-[#12141a] p-4 flex flex-col justify-between space-y-3.5">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-200">Animasi Kamera (Zoom & Pan)</span>
+                          {!enableZoom && !enablePan && (
+                            <span className="text-[11px] text-slate-500 font-normal">
+                              (Dinonaktifkan / Gambar Diam)
                             </span>
-                          </div>
-                          <div className="flex items-center gap-1">
+                          )}
+                        </div>
+
+                        {/* Checkbox Zoom & Pan */}
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <label
+                            className={`flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 transition border ${
+                              enableZoom
+                                ? "bg-[#1e222b] border-amber-500/40 text-slate-100"
+                                : "border-[#292e3b]/60 hover:bg-[#1e222b]/50 text-slate-300"
+                            }`}
+                          >
                             <input
-                              id="zoom-ratio-input"
-                              type="number"
-                              step="0.05"
-                              min="1.05"
-                              max="1.50"
-                              value={zoomRatio}
-                              onChange={(e) => setZoomRatio(parseFloat(e.target.value) || 1.15)}
-                              className="w-16 rounded-lg border border-[#292e3b] bg-[#0d0f14] px-2 py-1 text-center font-mono text-xs text-slate-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/40"
+                              type="checkbox"
+                              checked={enableZoom}
+                              onChange={(e) => setEnableZoom(e.target.checked)}
+                              className="mt-0.5 size-4 accent-amber-500 cursor-pointer rounded shrink-0"
                             />
-                            <span className="text-xs text-slate-400 font-mono font-medium">x</span>
+                            <div className="min-w-0">
+                              <span className="block text-xs font-medium text-slate-200">Animasi Zoom</span>
+                              <span className="text-[11px] text-slate-400 leading-tight block mt-0.5">
+                                Efek zoom halus (panel portrait otomatis selalu zoom in)
+                              </span>
+                            </div>
+                          </label>
+
+                          <label
+                            className={`flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 transition border ${
+                              enablePan
+                                ? "bg-[#1e222b] border-amber-500/40 text-slate-100"
+                                : "border-[#292e3b]/60 hover:bg-[#1e222b]/50 text-slate-300"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={enablePan}
+                              onChange={(e) => setEnablePan(e.target.checked)}
+                              className="mt-0.5 size-4 accent-amber-500 cursor-pointer rounded shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <span className="block text-xs font-medium text-slate-200">Animasi Pan</span>
+                              <span className="text-[11px] text-slate-400 leading-tight block mt-0.5">
+                                Geser kamera halus (digabung zoom di semua panel)
+                              </span>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Zoom Ratio Control (Visible when Zoom or Pan is enabled) */}
+                      {(enableZoom || enablePan) ? (
+                        <div className="pt-2.5 border-t border-[#292e3b]/60 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <label htmlFor="zoom-ratio-input" className="text-xs font-medium text-slate-200 block">
+                                Intensitas Zoom (Zoom Ratio)
+                              </label>
+                              <span className="text-[11px] text-slate-400">
+                                Perbesaran maksimal panel saat animasi zoom / pan
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <input
+                                id="zoom-ratio-input"
+                                type="number"
+                                step="0.05"
+                                min="1.05"
+                                max="1.50"
+                                value={zoomRatio}
+                                onChange={(e) => setZoomRatio(parseFloat(e.target.value) || 1.15)}
+                                className="w-16 rounded-lg border border-[#292e3b] bg-[#0d0f14] px-2 py-1 text-center font-mono text-xs text-slate-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/40"
+                              />
+                              <span className="text-xs text-slate-400 font-mono font-medium">x</span>
+                            </div>
+                          </div>
+
+                          {/* Preset Pills */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] text-slate-500 mr-1">Preset:</span>
+                            {ZOOM_PRESETS.map((val) => {
+                              const isSelected = Math.abs(zoomRatio - val) < 0.001;
+                              return (
+                                <button
+                                  key={val}
+                                  type="button"
+                                  className={`px-2.5 py-0.5 rounded-md text-[11px] font-mono transition border cursor-pointer ${
+                                    isSelected
+                                      ? "border-amber-500 bg-amber-500/20 text-amber-300 font-bold shadow-xs"
+                                      : "border-[#292e3b] text-slate-400 hover:text-slate-200 hover:bg-[#1e222b]"
+                                  }`}
+                                  onClick={() => setZoomRatio(val)}
+                                >
+                                  {val.toFixed(2)}x
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
-
-                        {/* Preset Pills */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[11px] text-slate-500 mr-1">Preset:</span>
-                          {ZOOM_PRESETS.map((val) => {
-                            const isSelected = Math.abs(zoomRatio - val) < 0.001;
-                            return (
-                              <button
-                                key={val}
-                                type="button"
-                                className={`px-2.5 py-0.5 rounded-md text-[11px] font-mono transition border cursor-pointer ${
-                                  isSelected
-                                    ? "border-amber-500 bg-amber-500/20 text-amber-300 font-bold shadow-xs"
-                                    : "border-[#292e3b] text-slate-400 hover:text-slate-200 hover:bg-[#1e222b]"
-                                }`}
-                                onClick={() => setZoomRatio(val)}
-                              >
-                                {val.toFixed(2)}x
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Section 2: Transisi Antar Adegan CapCut */}
-                  <div className="rounded-xl border border-[#292e3b] bg-[#12141a] p-3.5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Shuffle size={14} className="text-amber-400" />
-                        <span className="text-xs font-semibold text-slate-200">Transisi Antar Adegan CapCut</span>
-                      </div>
-                      {enableTransitions ? (
-                        <span className="text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/25">
-                          Aktif &bull; {selectedTransitions.length} Efek &bull; {transitionDuration.toFixed(1)}s
-                        </span>
                       ) : (
-                        <span className="text-[11px] text-slate-500 font-normal">
-                          (Nonaktif / Cut Langsung)
-                        </span>
+                        <div className="pt-2.5 border-t border-[#292e3b]/60 text-[11px] text-slate-500 italic">
+                          Centang Zoom atau Pan untuk mengaktifkan pengaturan rasio perbesaran kamera.
+                        </div>
                       )}
                     </div>
 
-                    {/* Checkbox Toggle */}
-                    <label
-                      className={`flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 transition border ${
-                        enableTransitions
-                          ? "bg-[#1e222b] border-amber-500/40 text-slate-100"
-                          : "border-[#292e3b]/60 hover:bg-[#1e222b]/50 text-slate-300"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={enableTransitions}
-                        onChange={(e) => setEnableTransitions(e.target.checked)}
-                        className="mt-0.5 size-4 accent-amber-500 shrink-0 cursor-pointer rounded"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <span className="text-xs font-medium text-slate-200 block">
-                          Aktifkan Transisi Acak Antar Adegan
-                        </span>
-                        <p className="text-[11px] text-slate-400 leading-tight mt-0.5">
-                          Otomatis memilih transisi favorit secara acak pada setiap pergantian antar gambar di timeline CapCut.
-                        </p>
-                      </div>
-                    </label>
-
-                    {/* Detail Controls when enabled */}
-                    {enableTransitions && (
-                      <div className="space-y-3 pt-1">
-                        <div className="rounded-lg border border-[#292e3b] bg-[#1e222b] p-2.5 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
-                              <Shuffle size={16} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <span className="text-xs font-semibold text-slate-200 truncate block">
-                                {selectedTransitions.length} Transisi Favorit Dipilih
-                              </span>
-                              <span className="text-[11px] text-slate-400 block truncate">
-                                Durasi: {transitionDuration.toFixed(2)} detik per transisi
-                              </span>
-                            </div>
+                    {/* Card Kanan: Transisi Antar Adegan CapCut */}
+                    <div className="rounded-xl border border-[#292e3b] bg-[#12141a] p-4 flex flex-col justify-between space-y-3.5">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Shuffle size={14} className="text-amber-400" />
+                            <span className="text-xs font-semibold text-slate-200">Transisi Antar Adegan CapCut</span>
                           </div>
+                          {enableTransitions ? (
+                            <span className="text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/25">
+                              Aktif &bull; {selectedTransitions.length} Efek &bull; {transitionDuration.toFixed(1)}s
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 font-normal">
+                              (Nonaktif / Cut Langsung)
+                            </span>
+                          )}
+                        </div>
 
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => setShowTransitionsModal(true)}
-                              className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/50 transition cursor-pointer"
-                            >
-                              <Sliders size={13} />
-                              <span>Atur Transisi</span>
-                            </button>
+                        {/* Checkbox Toggle */}
+                        <label
+                          className={`flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 transition border ${
+                            enableTransitions
+                              ? "bg-[#1e222b] border-amber-500/40 text-slate-100"
+                              : "border-[#292e3b]/60 hover:bg-[#1e222b]/50 text-slate-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={enableTransitions}
+                            onChange={(e) => setEnableTransitions(e.target.checked)}
+                            className="mt-0.5 size-4 accent-amber-500 shrink-0 cursor-pointer rounded"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-medium text-slate-200 block">
+                              Aktifkan Transisi Acak Antar Adegan
+                            </span>
+                            <p className="text-[11px] text-slate-400 leading-tight mt-0.5">
+                              Otomatis memilih transisi favorit secara acak pada setiap pergantian antar gambar di timeline CapCut.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Detail Controls when enabled */}
+                      {enableTransitions ? (
+                        <div className="pt-2.5 border-t border-[#292e3b]/60">
+                          <div className="rounded-lg border border-[#292e3b] bg-[#1e222b] p-2.5 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                                <Shuffle size={16} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <span className="text-xs font-semibold text-slate-200 truncate block">
+                                  {selectedTransitions.length} Transisi Favorit Dipilih
+                                </span>
+                                <span className="text-[11px] text-slate-400 block truncate">
+                                  Durasi: {transitionDuration.toFixed(2)} detik per transisi
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setShowTransitionsModal(true)}
+                                className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/50 transition cursor-pointer"
+                              >
+                                <Sliders size={13} />
+                                <span>Atur Transisi</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="pt-2.5 border-t border-[#292e3b]/60 text-[11px] text-slate-500 italic">
+                          Transisi dinonaktifkan. Setiap adegan akan berganti secara cut langsung.
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {error && (
