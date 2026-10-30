@@ -52,5 +52,11 @@ export const api = {
   exportCapCut: (id, options = {}) => request("POST", `/api/projects/${id}/export-capcut`, options),
   saveExportOpts: (id, data) => request("PUT", `/api/projects/${id}/export-opts`, data),
   capcutTransitions: () => request("GET", "/api/capcut/transitions"),
+  sfx: () => request("GET", "/api/sfx"),
+  uploadSfx: (data) => request("POST", "/api/sfx", data),
+  updateSfx: (id, data) => request("PATCH", `/api/sfx/${id}`, data),
+  deleteSfx: (id) => request("DELETE", `/api/sfx/${id}`),
+  sfxAudioUrl: (id) => `/api/sfx/${id}/audio`,
+  setSceneSfx: (id, i, data) => request("PUT", `/api/projects/${id}/scenes/${i}/sfx`, data),
   fileUrl: (id, name, v) => `/files/${id}/${name}?v=${encodeURIComponent(v ?? "")}`,
 };

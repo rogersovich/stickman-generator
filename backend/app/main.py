@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import audio, config, db, jobs, routes_audio, settings, storage
+from . import audio, config, db, jobs, routes_audio, routes_sfx, settings, storage
 from .models import (
     CreateProjectIn,
     ImportMarkdownIn,
@@ -49,6 +49,7 @@ app.add_middleware(
 )
 app.middleware("http")(routes_audio.trusted_network)
 app.include_router(routes_audio.router)
+app.include_router(routes_sfx.router)
 
 
 def _get(project_id: str) -> Project:
@@ -487,6 +488,7 @@ class CapCutExportIn(BaseModel):
     enable_transitions: bool = True
     transition_duration: float = 0.5
     allowed_transitions: list[str] | None = None
+    include_sfx: bool = True
 
 
 @app.get("/api/capcut/transitions")
@@ -503,6 +505,7 @@ class ExportOptsIn(BaseModel):
     enable_transitions: bool = True
     transition_duration: float = 0.5
     allowed_transitions: list[str] | None = None
+    include_sfx: bool = True
 
 
 @app.put("/api/projects/{project_id}/export-opts")
@@ -528,6 +531,7 @@ def export_capcut(project_id: str, body: CapCutExportIn = CapCutExportIn()):
             enable_transitions=body.enable_transitions,
             transition_duration=body.transition_duration,
             allowed_transitions=body.allowed_transitions,
+            include_sfx=body.include_sfx,
         )
     except LookupError as e:
         raise HTTPException(404, str(e))

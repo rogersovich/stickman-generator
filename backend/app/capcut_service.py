@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from . import storage
+from . import sfx, storage
 from .capcut import CapCutDraftGenerator
 
 
@@ -20,6 +20,7 @@ def export_project_to_capcut(
     enable_transitions: bool = True,
     transition_duration: float = 0.5,
     allowed_transitions: Optional[list[str]] = None,
+    include_sfx: bool = True,
 ) -> dict:
     p = storage.load(project_id)
     if not p:
@@ -29,6 +30,7 @@ def export_project_to_capcut(
 
     image_items = []
     audio_tracks = []
+    sfx_tracks = []
     current_time_s = 0.0
 
     for i, s in enumerate(p.scenes):
@@ -51,6 +53,19 @@ def export_project_to_capcut(
                 "start_s": current_time_s,
                 "chapter": f"Scene {i+1}",
             })
+
+        if include_sfx and s.sfx_id and sfx.get(s.sfx_id):
+            clip = min(sfx.duration(s.sfx_id), dur)
+            if clip > 0:
+                # SFX get their own audio track (lane 2) so they overlap the narration
+                sfx_tracks.append({
+                    "path": sfx.path(s.sfx_id),
+                    "duration": clip,
+                    "start_s": current_time_s + (dur - clip if s.sfx_pos == "end" else 0.0),
+                    "volume": sfx.volume(s.sfx_id),
+                    "chapter": "",
+                    "lane": 2,
+                })
 
         current_time_s += dur
 
@@ -77,7 +92,7 @@ def export_project_to_capcut(
         enable_transitions=enable_transitions,
         transition_duration=transition_duration,
         allowed_transitions=allowed_transitions,
-        audio_tracks=audio_tracks,
+        audio_tracks=audio_tracks + sfx_tracks,
     )
 
     # Generate an optional .srt subtitle file next to the draft for easy CapCut caption import
@@ -95,6 +110,7 @@ def export_project_to_capcut(
         "total_scenes": len(p.scenes),
         "exported_images": len(image_items),
         "exported_audios": len(audio_tracks),
+        "exported_sfx": len(sfx_tracks),
         "total_duration_s": round(current_time_s, 2),
     }
 
@@ -107,6 +123,7 @@ def export_project_to_capcut(
             "enable_transitions": enable_transitions,
             "transition_duration": transition_duration,
             "allowed_transitions": allowed_transitions,
+            "include_sfx": include_sfx,
         }
         p.last_capcut_draft = result
         storage.save(p)

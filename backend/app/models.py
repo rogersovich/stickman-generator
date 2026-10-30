@@ -9,6 +9,7 @@ ImageStatus = Literal["pending", "generating", "done", "failed"]
 JobKind = Literal["generate", "redownload"]
 AudioStatus = Literal["pending", "queued", "generating", "done", "failed"]
 TtsModel = Literal["omnivoice", "voxcpm2"]
+SfxPos = Literal["start", "end"]
 
 
 def now_iso() -> str:
@@ -39,6 +40,9 @@ class Scene(BaseModel):
     audio_key: str | None = None  # narration+voice+model the clip was made from (detects stale audio)
     audio_started_at: str | None = None
     audio_worker: str | None = None
+    # sound effect on the CapCut timeline, played at the start or end of the scene
+    sfx_id: str | None = None
+    sfx_pos: SfxPos = "start"
 
 
 class Project(BaseModel):
@@ -133,6 +137,22 @@ class ProjectTtsIn(BaseModel):
 class AudioGenerateIn(BaseModel):
     mode: Literal["missing", "all"] = "missing"
     indices: list[int] | None = None
+
+
+class SfxIn(BaseModel):
+    audio_base64: str
+    filename: str = "sfx.wav"
+    volume: float = Field(default=0.85, ge=0, le=1)
+
+
+class SfxUpdateIn(BaseModel):
+    label: str | None = Field(default=None, max_length=60)
+    volume: float | None = Field(default=None, ge=0, le=1)
+
+
+class SceneSfxIn(BaseModel):
+    sfx_id: str | None = None  # None = remove the scene's SFX
+    sfx_pos: SfxPos = "start"
 
 
 class VoiceIn(BaseModel):

@@ -63,7 +63,7 @@ export default function ProjectPage({ id, step }) {
           {step === "audio" ? (
             <AudioView project={project} setProject={setProject} />
           ) : step === "export" ? (
-            <ExportView project={project} />
+            <ExportView project={project} setProject={setProject} />
           ) : (
             <ProgressView project={project} setProject={setProject} />
           )}

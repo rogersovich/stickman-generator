@@ -10,12 +10,17 @@ import {
   Film,
   Image as ImageIcon,
   Music,
+  Pause,
+  Play,
+  Plus,
+  Volume2,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { go } from "./App.jsx";
 import CapCutExportModal from "./CapCutExportModal.jsx";
+import SfxLibrary, { playSfx, stopSfx } from "./SfxLibrary.jsx";
 
 const fmtSec = (s) => `${s.toFixed(1).replace(".", ",")} dtk`;
 
@@ -31,6 +36,46 @@ export default function ExportView({ project, setProject }) {
   const [draftResult, setDraftResult] = useState(null);
   const [draftDismissed, setDraftDismissed] = useState(false);
   const [copiedDraft, setCopiedDraft] = useState(false);
+  const [sfxItems, setSfxItems] = useState([]);
+  const [sfxOpen, setSfxOpen] = useState(false);
+  // scene whose SFX is being picked; null = library opened just to manage clips
+  const [sfxScene, setSfxScene] = useState(null);
+  const [playingSfx, setPlayingSfx] = useState(null);
+
+  useEffect(() => {
+    api.sfx().then(setSfxItems).catch(() => {});
+    return () => stopSfx();
+  }, []);
+
+  const sfxById = Object.fromEntries(sfxItems.map((x) => [x.id, x]));
+
+  async function setSceneSfx(i, sfx_id, sfx_pos) {
+    try {
+      setProject(await api.setSceneSfx(id, i, { sfx_id, sfx_pos }));
+    } catch {}
+  }
+
+  function openSfx(i) {
+    setSfxScene(i);
+    setSfxOpen(true);
+  }
+
+  function pickSfx(sfxId) {
+    const i = sfxScene;
+    setSfxOpen(false);
+    setSceneSfx(i, sfxId, scenes[i].sfx_pos || "start");
+    if (sfxId && sfxById[sfxId]) toggleSfx(i, sfxById[sfxId]);
+  }
+
+  function toggleSfx(i, item) {
+    if (playingSfx === i) {
+      stopSfx();
+      setPlayingSfx(null);
+      return;
+    }
+    setPlayingSfx(i);
+    playSfx(item, () => setPlayingSfx((cur) => (cur === i ? null : cur)));
+  }
 
   function handleFilterChange(f) {
     setFilter(f);
@@ -54,6 +99,7 @@ export default function ExportView({ project, setProject }) {
   const audioDone = scenes.filter((s) => s.audio_status === "done" && !s.audio_stale).length;
   const readyDone = scenes.filter((s) => s.image_status === "done" && s.audio_status === "done" && !s.audio_stale).length;
   const staleCount = scenes.filter((s) => s.audio_stale).length;
+  const sfxCount = scenes.filter((s) => s.sfx_id).length;
 
   const totalAudioSec = scenes.reduce((sum, s) => sum + (s.audio_status === "done" ? s.audio_duration ?? 0 : 0), 0);
   const totalMin = Math.floor(totalAudioSec / 60);
@@ -99,6 +145,13 @@ export default function ExportView({ project, setProject }) {
               title="Buka opsi ekspor dan rakit draft ke CapCut Desktop"
             >
               <Film size={15} /> ⚡ Ekspor Draft CapCut
+            </button>
+            <button
+              onClick={() => openSfx(null)}
+              className="btn-ghost text-xs flex items-center gap-2 px-3 py-2 text-slate-300"
+              title="Kelola library efek suara (SFX)"
+            >
+              <Volume2 size={14} /> Library SFX
             </button>
             <a
               href={api.downloadUrl(id)}
@@ -217,6 +270,10 @@ export default function ExportView({ project, setProject }) {
             </div>
           </div>
 
+          <span className="font-mono text-xs text-slate-400 flex items-center gap-1.5">
+            <Volume2 size={13} className="text-amber-400" /> {sfxCount} adegan ber-SFX
+          </span>
+
           {staleCount > 0 && (
             <span className="font-mono text-xs text-amber-300 flex items-center gap-1.5">
               <AlertCircle size={14} /> Ada {staleCount} audio basi yang perlu di-generate ulang di tab Audio
@@ -314,6 +371,15 @@ export default function ExportView({ project, setProject }) {
 
                   {/* Actions per scene */}
                   <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                    <SceneSfx
+                      scene={s}
+                      item={sfxById[s.sfx_id]}
+                      playing={playingSfx === i}
+                      onOpen={() => openSfx(i)}
+                      onPlay={() => sfxById[s.sfx_id] && toggleSfx(i, sfxById[s.sfx_id])}
+                      onPos={(pos) => setSceneSfx(i, s.sfx_id, pos)}
+                      onRemove={() => setSceneSfx(i, null, "start")}
+                    />
                     {!hasImg && (
                       <button
                         className="btn-ghost px-2 py-1 text-[11px] text-sky-300 hover:text-sky-200"
@@ -348,6 +414,15 @@ export default function ExportView({ project, setProject }) {
         </ul>
       </div>
 
+      <SfxLibrary
+        open={sfxOpen}
+        onClose={() => setSfxOpen(false)}
+        onChanged={setSfxItems}
+        title={sfxScene !== null ? `SFX Adegan #${sfxScene + 1}` : "Library SFX"}
+        selectedId={sfxScene !== null ? scenes[sfxScene]?.sfx_id : undefined}
+        onPick={sfxScene !== null ? pickSfx : undefined}
+      />
+
       {/* CapCut Export Settings & Confirmation Modal */}
       <CapCutExportModal
         open={capcutModalOpen}
@@ -355,6 +430,51 @@ export default function ExportView({ project, setProject }) {
         project={project}
         onExported={(res) => setDraftResult(res)}
       />
+    </div>
+  );
+}
+
+// SFX chip of one scene: "+ SFX" when empty, otherwise play / start-end toggle / remove.
+function SceneSfx({ scene, item, playing, onOpen, onPlay, onPos, onRemove }) {
+  if (!scene.sfx_id) {
+    return (
+      <button className="btn-ghost px-2 py-1 text-[11px] text-amber-300 hover:text-amber-200" onClick={onOpen} title="Tambah efek suara">
+        <Plus size={12} /> SFX
+      </button>
+    );
+  }
+  const pos = scene.sfx_pos || "start";
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-1 py-0.5 text-[11px] text-amber-200">
+      <button
+        className={`rounded p-1 ${playing ? "text-amber-300 animate-pulse" : "hover:bg-amber-500/20"}`}
+        onClick={onPlay}
+        disabled={!item}
+        aria-label={playing ? "Hentikan SFX" : "Putar SFX"}
+      >
+        {playing ? <Pause size={11} /> : <Play size={11} />}
+      </button>
+      <button className="max-w-[96px] truncate px-1 font-semibold hover:underline" onClick={onOpen} title="Ganti SFX">
+        {item ? item.label : "SFX hilang"}
+      </button>
+      <div className="flex rounded bg-black/30 p-0.5 font-mono text-[10px]">
+        {[
+          ["start", "Awal"],
+          ["end", "Akhir"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            className={`rounded px-1.5 ${pos === key ? "bg-amber-500 font-bold text-slate-900" : "text-amber-300/80 hover:bg-amber-500/20"}`}
+            onClick={() => pos !== key && onPos(key)}
+            title={`Bunyikan SFX di ${label.toLowerCase()} adegan`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <button className="rounded p-1 text-amber-300/70 hover:bg-red-500/20 hover:text-red-300" onClick={onRemove} aria-label="Lepas SFX">
+        <X size={11} />
+      </button>
     </div>
   );
 }

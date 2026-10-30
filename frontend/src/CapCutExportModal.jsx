@@ -9,6 +9,7 @@ import {
   Shuffle,
   Sliders,
   Sparkles,
+  Volume2,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -47,6 +48,7 @@ function readSavedOpts(project) {
       selectedTransitions: Array.isArray(p.allowed_transitions) && p.allowed_transitions.length > 0
         ? p.allowed_transitions
         : DEFAULT_TRANSITIONS,
+      includeSfx: typeof p.include_sfx === "boolean" ? p.include_sfx : true,
     };
   }
 
@@ -64,6 +66,7 @@ function readSavedOpts(project) {
         selectedTransitions: Array.isArray(p.allowed_transitions) && p.allowed_transitions.length > 0
           ? p.allowed_transitions
           : DEFAULT_TRANSITIONS,
+        includeSfx: typeof p.include_sfx === "boolean" ? p.include_sfx : true,
       };
     }
   } catch {}
@@ -82,6 +85,7 @@ function readSavedOpts(project) {
         selectedTransitions: Array.isArray(p.allowed_transitions) && p.allowed_transitions.length > 0
           ? p.allowed_transitions
           : DEFAULT_TRANSITIONS,
+        includeSfx: true,
       };
     }
   } catch {}
@@ -94,6 +98,7 @@ function readSavedOpts(project) {
     enableTransitions: true,
     transitionDuration: 0.5,
     selectedTransitions: DEFAULT_TRANSITIONS,
+    includeSfx: true,
   };
 }
 
@@ -107,6 +112,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
   const [transitionDuration, setTransitionDuration] = useState(0.5);
   const [selectedTransitions, setSelectedTransitions] = useState(DEFAULT_TRANSITIONS);
   const [showTransitionsModal, setShowTransitionsModal] = useState(false);
+  const [includeSfx, setIncludeSfx] = useState(true);
 
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState(null);
@@ -124,6 +130,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
       setEnableTransitions(saved.enableTransitions);
       setTransitionDuration(saved.transitionDuration);
       setSelectedTransitions(saved.selectedTransitions);
+      setIncludeSfx(saved.includeSfx);
       setError(null);
       setResult(null);
     }
@@ -137,6 +144,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
       enable_transitions: partial.enableTransitions !== undefined ? partial.enableTransitions : enableTransitions,
       transition_duration: partial.transitionDuration !== undefined ? partial.transitionDuration : transitionDuration,
       allowed_transitions: partial.selectedTransitions !== undefined ? partial.selectedTransitions : selectedTransitions,
+      include_sfx: partial.includeSfx !== undefined ? partial.includeSfx : includeSfx,
     };
 
     // 1. Save to localStorage immediately
@@ -173,6 +181,11 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
     persist({ enableTransitions: val });
   }
 
+  function handleSfxToggle(val) {
+    setIncludeSfx(val);
+    persist({ includeSfx: val });
+  }
+
   function handleSaveTransitions({ selectedTransitions: nextSelected, duration: nextDuration }) {
     setSelectedTransitions(nextSelected);
     setTransitionDuration(nextDuration);
@@ -187,6 +200,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
   const total = scenes.length;
   const imagesDone = scenes.filter((s) => s.image_status === "done").length;
   const audioDone = scenes.filter((s) => s.audio_status === "done" && !s.audio_stale).length;
+  const sfxCount = scenes.filter((s) => s.sfx_id).length;
 
   const totalAudioSec = scenes.reduce(
     (sum, s) => sum + (s.audio_status === "done" ? s.audio_duration ?? 0 : (s.image_status === "done" ? 2.5 : 0)),
@@ -214,8 +228,9 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
       enable_transitions: enableTransitions,
       transition_duration: transitionDuration,
       allowed_transitions: selectedTransitions,
+      include_sfx: includeSfx,
     };
-    persist(opts);
+    persist({});
     try {
       const res = await api.exportCapCut(project.id, opts);
       setResult(res);
@@ -268,7 +283,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                       {result.draft_name}
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 py-1 text-center font-mono">
+                  <div className="grid grid-cols-4 gap-2 py-1 text-center font-mono">
                     <div className="rounded-lg bg-[#181c24] p-2 border border-[#292e3b]/60">
                       <div className="text-[11px] text-slate-400">Gambar</div>
                       <div className="text-base font-bold text-slate-100">{result.exported_images}</div>
@@ -276,6 +291,10 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                     <div className="rounded-lg bg-[#181c24] p-2 border border-[#292e3b]/60">
                       <div className="text-[11px] text-slate-400">Audio WAV</div>
                       <div className="text-base font-bold text-slate-100">{result.exported_audios}</div>
+                    </div>
+                    <div className="rounded-lg bg-[#181c24] p-2 border border-[#292e3b]/60">
+                      <div className="text-[11px] text-slate-400">SFX</div>
+                      <div className="text-base font-bold text-slate-100">{result.exported_sfx ?? 0}</div>
                     </div>
                     <div className="rounded-lg bg-[#181c24] p-2 border border-[#292e3b]/60">
                       <div className="text-[11px] text-slate-400">Durasi</div>
@@ -370,7 +389,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                     <div className="space-y-1">
                       <span className="text-slate-500">Kesiapan Aset</span>
                       <div className="font-semibold text-slate-200">
-                        <span className="text-sky-400">{imagesDone} Gambar</span> • <span className="text-emerald-400">{audioDone} Audio</span>
+                        <span className="text-sky-400">{imagesDone} Gambar</span> • <span className="text-emerald-400">{audioDone} Audio</span> • <span className="text-amber-300">{includeSfx ? sfxCount : 0} SFX</span>
                       </div>
                     </div>
                     <div className="space-y-1">
@@ -587,6 +606,33 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                       )}
                     </div>
                   </div>
+
+                  {/* SFX */}
+                  <label
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3.5 transition ${
+                      includeSfx ? "border-amber-500/40 bg-[#1e222b]" : "border-[#292e3b] bg-[#12141a] hover:bg-[#1e222b]/50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={includeSfx}
+                      onChange={(e) => handleSfxToggle(e.target.checked)}
+                      className="mt-0.5 size-4 shrink-0 cursor-pointer rounded accent-amber-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 text-xs font-semibold text-slate-200">
+                        <Volume2 size={14} className="text-amber-400" /> Sertakan Efek Suara (SFX)
+                        <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 font-mono text-[11px] font-normal text-amber-300">
+                          {sfxCount} adegan
+                        </span>
+                      </span>
+                      <p className="mt-0.5 text-[11px] leading-tight text-slate-400">
+                        {sfxCount > 0
+                          ? "SFX tiap adegan ditaruh di track audio terpisah, di awal atau akhir adegan sesuai pilihan."
+                          : "Belum ada adegan yang diberi SFX. Pasang lewat tombol \"+ SFX\" di daftar adegan."}
+                      </p>
+                    </div>
+                  </label>
 
                   {error && (
                     <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300 flex items-center gap-2">

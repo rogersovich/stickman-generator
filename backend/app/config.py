@@ -43,6 +43,8 @@ JOB_TIMEOUT_SECONDS = float(os.getenv("JOB_TIMEOUT_SECONDS", "300"))
 
 # narration audio (TTS)
 VOICES_DIR = _path(os.getenv("VOICES_DIR", "data/voices"))
+# custom sound effects for the CapCut export (built-in ones ship in backend/assets/sfx)
+SFX_DIR = _path(os.getenv("SFX_DIR", "data/sfx"))
 # shared secret for TTS workers on other machines; empty = only workers on this machine (localhost)
 TTS_WORKER_TOKEN = os.getenv("TTS_WORKER_TOKEN", "")
 # local: every worker takes jobs | auto: this machine's worker skips models an online remote worker has
