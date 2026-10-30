@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, ArrowRightLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Columns2, Columns3, Columns4, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, Trash2, WandSparkles, X, Zap } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Clock, Columns2, Columns3, Columns4, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, Trash2, WandSparkles, X, Zap } from "lucide-react";
 import { api } from "./api.js";
+import FailedNav, { useFailedNav } from "./FailedNav.jsx";
 import NarrationEditor from "./NarrationEditor.jsx";
 import { useDialog } from "./ui.jsx";
 
@@ -240,22 +241,11 @@ export default function ProgressView({ project, setProject }) {
   const [cols, setCols] = useGridCols(project.format);
   const compact = cols === 4; // narrow cards: icon-only actions, shorter narration
 
-  // Jump between failed frames: cursor points into failedIndexes, flash highlights the target card
-  const failedIndexes = project.scenes.flatMap((s, i) => (s.image_status === "failed" ? [i] : []));
-  const [failCursor, setFailCursor] = useState(-1);
-  const [flash, setFlash] = useState(null);
-
-  function goToFailed(step) {
-    const n = failedIndexes.length;
-    if (!n) return;
-    const cursor = Math.min(failCursor, n - 1);
-    const next = cursor < 0 ? (step > 0 ? 0 : n - 1) : (cursor + step + n) % n;
-    const i = failedIndexes[next];
-    setFailCursor(next);
-    document.getElementById(`scene-${i}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    setFlash(i);
-    setTimeout(() => setFlash((f) => (f === i ? null : f)), 1800);
-  }
+  const failedNav = useFailedNav(
+    project.scenes.flatMap((s, i) => (s.image_status === "failed" ? [i] : [])),
+    "scene-"
+  );
+  const flash = failedNav.flash;
 
   // Estimasi durasi selesai
   const remainingScenes = project.scenes.filter((s) => s.image_status !== "done" && !s.is_merged).length;
@@ -345,7 +335,7 @@ export default function ProgressView({ project, setProject }) {
               {failed > 0 && (
                 <button
                   className="ml-2 text-red-400 underline decoration-dotted underline-offset-2 hover:text-red-300"
-                  onClick={() => goToFailed(1)}
+                  onClick={() => failedNav.goTo(1)}
                   title="Lompat ke frame yang gagal"
                 >
                   ({failed} gagal)
@@ -578,21 +568,7 @@ export default function ProgressView({ project, setProject }) {
         ))}
       </div>
 
-      {failedIndexes.length > 0 && (
-        <div className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full border border-red-500/40 bg-[#1a1d25]/95 p-1 pl-3 text-xs text-red-300 shadow-lg backdrop-blur">
-          <button className="flex items-center gap-1.5 font-mono hover:text-red-200" onClick={() => goToFailed(failCursor < 0 ? 1 : 0)} title="Lompat ke frame gagal">
-            <AlertTriangle size={13} />
-            Gagal {failCursor < 0 ? "–" : Math.min(failCursor, failedIndexes.length - 1) + 1}/{failedIndexes.length}
-            {failCursor >= 0 && <span className="text-red-400/70">· #{failedIndexes[Math.min(failCursor, failedIndexes.length - 1)] + 1}</span>}
-          </button>
-          <button className="ml-1 rounded-full p-1.5 hover:bg-red-500/15" onClick={() => goToFailed(-1)} title="Frame gagal sebelumnya" aria-label="Frame gagal sebelumnya">
-            <ChevronUp size={15} />
-          </button>
-          <button className="rounded-full p-1.5 hover:bg-red-500/15" onClick={() => goToFailed(1)} title="Frame gagal berikutnya" aria-label="Frame gagal berikutnya">
-            <ChevronDown size={15} />
-          </button>
-        </div>
-      )}
+      <FailedNav nav={failedNav} />
 
       {preview !== null && (
         <Lightbox

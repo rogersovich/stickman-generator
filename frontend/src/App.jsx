@@ -27,7 +27,7 @@ export function go(path) {
 
 export default function App() {
   const path = usePathRoute();
-  const projectId = path.match(/^\/project\/([a-z0-9-]+)/)?.[1];
+  const [, projectId, step = "images"] = path.match(/^\/project\/([a-z0-9-]+)(?:\/(images|audio|export))?/) ?? [];
   const onSettings = path.startsWith("/settings");
 
   return (
@@ -78,7 +78,7 @@ export default function App() {
         {onSettings ? (
           <Settings />
         ) : projectId ? (
-          <ProjectPage key={projectId} id={projectId} />
+          <ProjectPage key={projectId} id={projectId} step={step} />
         ) : (
           <Home />
         )}

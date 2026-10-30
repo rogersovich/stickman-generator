@@ -6,8 +6,9 @@ import { confirmDelete } from "./deleteProject.js";
 import { useDialog } from "./ui.jsx";
 import DraftEditor from "./DraftEditor.jsx";
 import ProgressView from "./ProgressView.jsx";
+import ProjectSteps from "./ProjectSteps.jsx";
 
-export default function ProjectPage({ id }) {
+export default function ProjectPage({ id, step }) {
   const dialog = useDialog();
   const [project, setProject] = useState(null);
   const [error, setError] = useState("");
@@ -55,7 +56,16 @@ export default function ProjectPage({ id }) {
       {project.status === "draft" ? (
         <DraftEditor project={project} onConfirmed={setProject} />
       ) : (
-        <ProgressView project={project} setProject={setProject} />
+        <>
+          <ProjectSteps project={project} step={step} />
+          {step === "audio" ? (
+            <div className="panel p-6 text-sm text-slate-400">Halaman audio sedang disiapkan.</div>
+          ) : step === "export" ? (
+            <div className="panel p-6 text-sm text-slate-400">Review + Export CapCut segera hadir.</div>
+          ) : (
+            <ProgressView project={project} setProject={setProject} />
+          )}
+        </>
       )}
     </div>
   );
