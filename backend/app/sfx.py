@@ -138,7 +138,7 @@ def list_catalog() -> list[dict]:
             continue
         if item:
             out.append(item)
-    return out
+    return sorted(out, key=lambda x: x["label"].casefold())
 
 
 def volume(sfx_id: str) -> float:

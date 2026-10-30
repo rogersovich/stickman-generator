@@ -46,6 +46,8 @@ def test_catalog_lists_builtins_with_files():
     whoosh = next(i for i in items if i["id"] == "whoosh")
     assert whoosh["built_in"] and whoosh["duration"] > 0 and 0 <= whoosh["volume"] <= 1
     assert all(sfx.path(i["id"]).is_file() for i in items)
+    labels = [i["label"].casefold() for i in items]
+    assert labels == sorted(labels)
 
 
 def test_update_volume_and_label_persist():
