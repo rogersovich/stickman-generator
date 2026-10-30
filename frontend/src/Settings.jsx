@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { AudioLines, Check, Clock, Cpu, HardDrive, Info, Layers, Lock, Play, Save, Sliders, Volume2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AudioLines, Check, Clock, Cpu, HardDrive, Info, Layers, Lock, Pause, Play, Save, Sliders, Volume2 } from "lucide-react";
 import { api } from "./api.js";
 import { ChoiceCards, Select, Toggle } from "./ui.jsx";
 
@@ -118,6 +118,47 @@ export default function Settings() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+  const [playingVoiceId, setPlayingVoiceId] = useState(null);
+  const voiceAudioRef = useRef(null);
+
+  function stopVoiceAudio() {
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current = null;
+    }
+    setPlayingVoiceId(null);
+  }
+
+  function toggleVoicePlay(id) {
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current = null;
+    }
+    if (playingVoiceId === id) {
+      setPlayingVoiceId(null);
+      return;
+    }
+    if (!id) return;
+    const a = new Audio(api.voiceAudioUrl(id));
+    voiceAudioRef.current = a;
+    setPlayingVoiceId(id);
+    a.play().catch(() => {
+      setPlayingVoiceId(null);
+      voiceAudioRef.current = null;
+    });
+    a.onended = () => {
+      setPlayingVoiceId(null);
+      voiceAudioRef.current = null;
+    };
+    a.onerror = () => {
+      setPlayingVoiceId(null);
+      voiceAudioRef.current = null;
+    };
+  }
+
+  useEffect(() => {
+    return () => stopVoiceAudio();
+  }, []);
 
   useEffect(() => {
     api.settings().then(setSettings).catch((e) => setMessage({ error: true, text: e.message }));
@@ -214,12 +255,12 @@ export default function Settings() {
                 {settings.tts_voice_id && (
                   <button
                     type="button"
-                    className="btn-ghost px-2.5 py-2"
-                    onClick={() => new Audio(api.voiceAudioUrl(settings.tts_voice_id)).play()}
-                    title="Putar contoh suara"
-                    aria-label="Putar contoh suara"
+                    className={`btn-ghost px-2.5 py-2 transition ${playingVoiceId === settings.tts_voice_id ? "text-amber-300 bg-amber-500/15" : ""}`}
+                    onClick={() => toggleVoicePlay(settings.tts_voice_id)}
+                    title={playingVoiceId === settings.tts_voice_id ? "Hentikan contoh suara" : "Putar contoh suara"}
+                    aria-label={playingVoiceId === settings.tts_voice_id ? "Hentikan contoh suara" : "Putar contoh suara"}
                   >
-                    <Play size={14} />
+                    {playingVoiceId === settings.tts_voice_id ? <Pause size={14} /> : <Play size={14} />}
                   </button>
                 )}
               </div>

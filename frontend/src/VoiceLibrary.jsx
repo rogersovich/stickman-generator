@@ -1,5 +1,5 @@
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
-import { Download, Loader2, Play, Star, Trash2, Upload, X } from "lucide-react";
+import { Download, Loader2, Pause, Play, Star, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import { useDialog } from "./ui.jsx";
@@ -17,12 +17,48 @@ function readBase64(file) {
 export default function VoiceLibrary({ open, onClose, onChanged }) {
   const dialog = useDialog();
   const fileRef = useRef(null);
+  const audioRef = useRef(null);
   const [voices, setVoices] = useState([]);
   const [defaultId, setDefaultId] = useState(null);
+  const [playingId, setPlayingId] = useState(null);
   const [name, setName] = useState("");
   const [transcript, setTranscript] = useState("");
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState("");
+
+  function stopAudio() {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setPlayingId(null);
+  }
+
+  function togglePlay(id) {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (playingId === id) {
+      setPlayingId(null);
+      return;
+    }
+    const audio = new Audio(api.voiceAudioUrl(id));
+    audioRef.current = audio;
+    setPlayingId(id);
+    audio.play().catch(() => {
+      setPlayingId(null);
+      audioRef.current = null;
+    });
+    audio.onended = () => {
+      setPlayingId(null);
+      audioRef.current = null;
+    };
+    audio.onerror = () => {
+      setPlayingId(null);
+      audioRef.current = null;
+    };
+  }
 
   async function refresh() {
     const [list, s] = await Promise.all([api.voices(), api.settings()]);
@@ -33,7 +69,12 @@ export default function VoiceLibrary({ open, onClose, onChanged }) {
 
   useEffect(() => {
     if (open) refresh().catch(() => {});
+    else stopAudio();
   }, [open]);
+
+  useEffect(() => {
+    return () => stopAudio();
+  }, []);
 
   async function run(label, fn) {
     setBusy(label);
@@ -78,7 +119,10 @@ export default function VoiceLibrary({ open, onClose, onChanged }) {
       confirmLabel: "Hapus",
       danger: true,
     });
-    if (ok) run(`del-${v.id}`, async () => (await api.deleteVoice(v.id), await refresh()));
+    if (ok) {
+      if (playingId === v.id) stopAudio();
+      run(`del-${v.id}`, async () => (await api.deleteVoice(v.id), await refresh()));
+    }
   }
 
   return (
@@ -105,39 +149,46 @@ export default function VoiceLibrary({ open, onClose, onChanged }) {
                 Belum ada suara. Upload rekaman atau impor dari manhwa-recap-studio.
               </li>
             )}
-            {voices.map((v) => (
-              <li key={v.id} className="card flex items-center gap-3 p-3">
-                <button
-                  className="rounded-full border border-[#292e3b] p-2 text-amber-300 hover:bg-amber-500/10"
-                  onClick={() => new Audio(api.voiceAudioUrl(v.id)).play()}
-                  title="Putar contoh"
-                  aria-label={`Putar contoh suara ${v.name}`}
-                >
-                  <Play size={13} />
-                </button>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
-                    {v.name}
-                    {v.id === defaultId && <span className="rounded bg-amber-500/15 px-1.5 font-mono text-[10px] text-amber-300">DEFAULT</span>}
-                    <span className="font-mono text-[11px] font-normal text-slate-500">{v.duration.toFixed(1)} dtk</span>
-                  </div>
-                  {v.transcript && <p className="truncate text-xs text-slate-400">{v.transcript}</p>}
-                </div>
-                {v.id !== defaultId && (
-                  <button className="btn-ghost px-2 py-1 text-[11px]" onClick={() => setDefault(v.id)} disabled={!!busy} title="Jadikan suara default">
-                    <Star size={12} /> Default
+            {voices.map((v) => {
+              const isPlaying = playingId === v.id;
+              return (
+                <li key={v.id} className="card flex items-center gap-3 p-3">
+                  <button
+                    className={`rounded-full border p-2 transition ${
+                      isPlaying
+                        ? "border-amber-400 bg-amber-400 text-slate-900 shadow-md shadow-amber-400/20"
+                        : "border-[#292e3b] text-amber-300 hover:bg-amber-500/10"
+                    }`}
+                    onClick={() => togglePlay(v.id)}
+                    title={isPlaying ? "Hentikan contoh" : "Putar contoh"}
+                    aria-label={`${isPlaying ? "Hentikan" : "Putar"} contoh suara ${v.name}`}
+                  >
+                    {isPlaying ? <Pause size={13} /> : <Play size={13} />}
                   </button>
-                )}
-                <button
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-red-500/15 hover:text-red-300"
-                  onClick={() => remove(v)}
-                  disabled={!!busy}
-                  aria-label={`Hapus suara ${v.name}`}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </li>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+                      {v.name}
+                      {v.id === defaultId && <span className="rounded bg-amber-500/15 px-1.5 font-mono text-[10px] text-amber-300">DEFAULT</span>}
+                      <span className="font-mono text-[11px] font-normal text-slate-500">{v.duration.toFixed(1)} dtk</span>
+                    </div>
+                    {v.transcript && <p className="truncate text-xs text-slate-400">{v.transcript}</p>}
+                  </div>
+                  {v.id !== defaultId && (
+                    <button className="btn-ghost px-2 py-1 text-[11px]" onClick={() => setDefault(v.id)} disabled={!!busy} title="Jadikan suara default">
+                      <Star size={12} /> Default
+                    </button>
+                  )}
+                  <button
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-red-500/15 hover:text-red-300"
+                    onClick={() => remove(v)}
+                    disabled={!!busy}
+                    aria-label={`Hapus suara ${v.name}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
 
           <form onSubmit={upload} className="space-y-2.5 border-t border-[#292e3b] pt-4">

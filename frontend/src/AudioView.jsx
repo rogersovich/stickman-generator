@@ -1,5 +1,5 @@
 import { AudioLines, Check, Library, Loader2, Pause, Pencil, Play, RotateCcw, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import FailedNav, { useFailedNav } from "./FailedNav.jsx";
 import VoiceLibrary from "./VoiceLibrary.jsx";
@@ -79,6 +79,47 @@ export default function AudioView({ project, setProject }) {
   const [settings, setSettings] = useState(null);
   const [status, setStatus] = useState(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [playingPreview, setPlayingPreview] = useState(false);
+  const previewAudioRef = useRef(null);
+
+  function stopPreview() {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+    }
+    setPlayingPreview(false);
+  }
+
+  function togglePreview(voiceId) {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+    }
+    if (playingPreview) {
+      setPlayingPreview(false);
+      return;
+    }
+    if (!voiceId) return;
+    const a = new Audio(api.voiceAudioUrl(voiceId));
+    previewAudioRef.current = a;
+    setPlayingPreview(true);
+    a.play().catch(() => {
+      setPlayingPreview(false);
+      previewAudioRef.current = null;
+    });
+    a.onended = () => {
+      setPlayingPreview(false);
+      previewAudioRef.current = null;
+    };
+    a.onerror = () => {
+      setPlayingPreview(false);
+      previewAudioRef.current = null;
+    };
+  }
+
+  useEffect(() => {
+    return () => stopPreview();
+  }, []);
 
   const scenes = project.scenes;
   const busy = scenes.some((s) => s.audio_status === "queued" || s.audio_status === "generating");
@@ -157,13 +198,13 @@ export default function AudioView({ project, setProject }) {
             <div className="flex gap-1.5">
               <Select className="flex-1" value={project.voice_id ?? ""} onChange={(v) => setTts({ voice_id: v || null })} options={voiceOptions} />
               <button
-                className="btn-ghost px-2.5"
+                className={`btn-ghost px-2.5 transition ${playingPreview ? "text-amber-300 bg-amber-500/15" : ""}`}
                 disabled={!activeVoiceId}
-                onClick={() => new Audio(api.voiceAudioUrl(activeVoiceId)).play()}
-                title="Putar contoh suara"
-                aria-label="Putar contoh suara"
+                onClick={() => togglePreview(activeVoiceId)}
+                title={playingPreview ? "Hentikan contoh suara" : "Putar contoh suara"}
+                aria-label={playingPreview ? "Hentikan contoh suara" : "Putar contoh suara"}
               >
-                <Play size={14} />
+                {playingPreview ? <Pause size={14} /> : <Play size={14} />}
               </button>
             </div>
           </div>
