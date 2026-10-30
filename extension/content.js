@@ -706,7 +706,7 @@ async function workerLoop() {
             };
             step("menempel prompt (paste instan)…");
             await pastePrompt(input, job.prompt);
-            const beforeSendMs = Math.max(200, cfg.before_send ? secRange(cfg.before_send) * 1000 : 500);
+            const beforeSendMs = Math.max(200, cfg.before_send ? secRange(cfg.before_send) : 500);
             await sleep(beforeSendMs);
             checkStopped();
             step("mengirim prompt…");
@@ -715,7 +715,7 @@ async function workerLoop() {
             log(`Scene ${job.scene_index + 1}/${job.total} terkirim! (${inFlight.length}/${maxConcurrency} sedang diproses)`, "ok");
             setState("job", `${inFlight.length} gambar sedang diproses Flow secara paralel…`);
             // Breathing room after submitting so Flow mounts the new card cleanly before next paste
-            const interPromptMs = cfg.delay_between_images ? Math.max(1000, Math.min(secRange(cfg.delay_between_images) * 1000, 3500)) : 1500;
+            const interPromptMs = cfg.delay_between_images ? Math.max(1000, Math.min(secRange(cfg.delay_between_images), 3500)) : 1500;
             await sleep(interPromptMs);
             continue; // check immediately if another slot can be submitted!
           }
