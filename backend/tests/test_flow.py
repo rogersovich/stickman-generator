@@ -411,3 +411,10 @@ def test_scene_reports_real_resolution(client, data, label):
     mime = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
     client.post(f"/api/jobs/{p['id']}/0/result", json={"image_base64": base64.b64encode(data).decode(), "mime": mime})
     assert client.get(f"/api/projects/{p['id']}").json()["scenes"][0]["image_res"] == label
+
+
+def test_files_rejects_backslash(client):
+    p = client.post("/api/projects", json={"topic": "x", "scene_count": 1}).json()
+    # on Windows "\\" is a path separator, so a name containing it could escape the project folder
+    (config.OUTPUT_DIR / p["id"] / "sub\\file.png").write_bytes(b"x")
+    assert client.get(f"/files/{p['id']}/sub%5Cfile.png").status_code == 404

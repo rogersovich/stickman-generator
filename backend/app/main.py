@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
-from . import config, db, jobs, settings, storage
+from . import audio, config, db, jobs, routes_audio, settings, storage
 from .models import (
     CreateProjectIn,
     ImportMarkdownIn,
@@ -22,6 +22,7 @@ from .models import (
     UpdateDraftIn,
 )
 from .parser import parse_markdown_prompts
+from .serialize import project_out as _out
 from .story import StoryError, generate_story, rewrite_narration, scene_count_for
 from .styles import build_prompt, load_styles
 
@@ -29,6 +30,7 @@ from .styles import build_prompt, load_styles
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    audio.reset_on_startup()
     for p in storage.list_all():
         try:
             db.save_project_record(p)
@@ -44,6 +46,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware("http")(routes_audio.trusted_network)
+app.include_router(routes_audio.router)
 
 
 def _get(project_id: str) -> Project:
@@ -56,22 +60,13 @@ def _get(project_id: str) -> Project:
     return p
 
 
-def _out(p: Project) -> dict:
-    """Project as JSON, plus each scene's real image resolution and whether it is still only a low-res thumbnail."""
-    data = p.model_dump()
-    for scene, out in zip(p.scenes, data["scenes"]):
-        out["needs_hd"] = jobs.needs_hd(p.id, scene)
-        out["image_res"] = jobs.image_res(p.id, scene)
-    return data
-
-
 @app.get("/files/{project_id}/{name}")
 def get_file(project_id: str, name: str):
     try:
         f = storage.project_dir(project_id) / name
     except ValueError:
         raise HTTPException(404)
-    if "/" in name or ".." in name or not f.is_file():
+    if "/" in name or "\\" in name or ".." in name or not f.is_file():
         raise HTTPException(404)
     return FileResponse(f)
 
@@ -422,6 +417,8 @@ def download(project_id: str):
                 src_path = d / s.image_file
                 out_name = f"scene_{i + 1:03d}{src_path.suffix}"
                 z.write(src_path, out_name)
+            if s.audio_file and (d / s.audio_file).exists():
+                z.write(d / s.audio_file, s.audio_file)
 
     buf.seek(0)
     return StreamingResponse(
