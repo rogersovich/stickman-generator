@@ -435,22 +435,58 @@ function blobToBase64(blob) {
   });
 }
 
-async function grabImage(src) {
+function grabImageFromCanvas(img) {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    if (canvas.width >= 100 && canvas.height >= 100) {
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const dataUrl = canvas.toDataURL("image/png");
+      if (dataUrl && dataUrl.length > 500) {
+        return { base64: dataUrl.split(",", 2)[1], mime: "image/png" };
+      }
+    }
+  } catch {}
+  return null;
+}
+
+async function grabImage(src, imgElement = null) {
+  // 1. Try directly from rendered canvas in DOM if available (instant, no network)
+  if (imgElement) {
+    const fromCanvas = grabImageFromCanvas(imgElement);
+    if (fromCanvas) return fromCanvas;
+  }
+
+  // 2. Data URL
   if (src.startsWith("data:")) {
     const [, mime, base64] = src.match(/^data:([^;]+);base64,(.*)$/) || [];
     if (!base64) throw new Error("unsupported data URL");
     return { base64, mime };
   }
-  if (src.startsWith("blob:") || new URL(src).origin === location.origin) {
-    const blob = await (await fetch(src, { credentials: "include" })).blob();
+
+  // 3. Blob URL: fetch without credentials (blob URLs reject credentials)
+  if (src.startsWith("blob:")) {
+    const blob = await (await fetch(src)).blob();
     return { base64: await blobToBase64(blob), mime: blob.type || "image/png" };
   }
-  // cross-origin (googleusercontent etc.): fetch from the background, try full size first
+
+  // 4. Same-origin fetch
+  try {
+    if (new URL(src, location.href).origin === location.origin) {
+      const blob = await (await fetch(src)).blob();
+      return { base64: await blobToBase64(blob), mime: blob.type || "image/png" };
+    }
+  } catch {}
+
+  // 5. Cross-origin: fetch via background service worker, try full size first
   if (/googleusercontent\.com/.test(src) && /=[swh]\d+[^/]*$/.test(src)) {
     try {
       return await send({ type: "fetchImage", url: src.replace(/=[swh]\d+[^/]*$/, "=s0") });
     } catch {}
   }
+
   return send({ type: "fetchImage", url: src });
 }
 
@@ -845,7 +881,7 @@ async function workerLoop() {
                 if (e instanceof WorkerStopped) throw e;
                 note = `resolusi rendah: download ${cfg.resolution} gagal: ${e.message}`;
                 try {
-                  const image = await grabImage(src);
+                  const image = await grabImage(src, freshImg);
                   await api("POST", `${path}/result`, { image_base64: image.base64, mime: image.mime, flow_src: src, note });
                 } catch (err) {
                   log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
@@ -856,7 +892,7 @@ async function workerLoop() {
               // Batch-end mode (or thumbnail): grab image instantly (<200ms) without menu clicks
               step(cfg.resolution === "1K" ? "menyimpan 1K instan…" : "menyimpan pratinjau…");
               try {
-                const image = await grabImage(src);
+                const image = await grabImage(src, freshImg);
                 await api("POST", `${path}/result`, {
                   image_base64: image.base64,
                   mime: image.mime,

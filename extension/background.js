@@ -28,7 +28,13 @@ async function callApi({ method, path, body }) {
 }
 
 async function fetchImage({ url }) {
-  const res = await fetch(url, { credentials: "include" });
+  // Never force credentials: "include" on CDN images (causes CORS Access-Control-Allow-Credentials violation)
+  let res;
+  try {
+    res = await fetch(url, { credentials: "omit" });
+  } catch {
+    res = await fetch(url);
+  }
   if (!res.ok) throw new Error(`image fetch ${res.status}`);
   const mime = (res.headers.get("content-type") || "image/png").split(";")[0];
   if (!mime.startsWith("image/")) throw new Error(`not an image: ${mime}`);

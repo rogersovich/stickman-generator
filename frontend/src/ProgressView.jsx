@@ -154,9 +154,18 @@ function Lightbox({ project, index, onClose, onNavigate, onRetry, onRedownload, 
               </button>
             )}
             {src && (
-              <a className="btn-ghost col-span-2 text-xs" href={src} target="_blank" rel="noreferrer">
-                <ExternalLink size={13} /> Buka Gambar Asli
-              </a>
+              <>
+                <a
+                  className="btn-primary col-span-2 text-xs"
+                  href={src}
+                  download={`scene_${String(index + 1).padStart(3, "0")}.${scene.image_file?.split(".").pop() || "png"}`}
+                >
+                  <Download size={13} /> Unduh File Frame #{index + 1}
+                </a>
+                <a className="btn-ghost col-span-2 text-xs" href={src} target="_blank" rel="noreferrer">
+                  <ExternalLink size={13} /> Buka Gambar di Tab Baru
+                </a>
+              </>
             )}
           </div>
 
@@ -330,6 +339,15 @@ export default function ProgressView({ project, setProject }) {
                   <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-xs font-semibold text-white opacity-0 transition duration-150 group-hover:opacity-100">
                     <Maximize2 size={15} className="mr-1.5 text-amber-400" /> Pratinjau Frame
                   </span>
+                  <a
+                    href={api.fileUrl(id, s.image_file, project.updated_at)}
+                    download={`scene_${String(i + 1).padStart(3, "0")}.${s.image_file.split(".").pop()}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute top-2 right-2 z-10 rounded-lg bg-black/70 p-1.5 text-slate-200 backdrop-blur hover:bg-black hover:text-amber-400 transition"
+                    title={`Unduh Scene #${i + 1}`}
+                  >
+                    <Download size={14} />
+                  </a>
                 </>
               ) : (
                 <div className="flex flex-col items-center gap-2 p-4 text-center">
@@ -389,6 +407,16 @@ export default function ProgressView({ project, setProject }) {
                     >
                       <RotateCcw size={12} /> {s.image_status === "failed" ? "Coba Lagi" : "Ulang"}
                     </button>
+                  )}
+                  {s.image_file && (
+                    <a
+                      className="btn-ghost py-1.5 px-2.5 text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
+                      href={api.fileUrl(id, s.image_file, project.updated_at)}
+                      download={`scene_${String(i + 1).padStart(3, "0")}.${s.image_file.split(".").pop()}`}
+                      title={`Unduh file frame #${i + 1}`}
+                    >
+                      <Download size={12} /> Unduh
+                    </a>
                   )}
                 </div>
                 {s.needs_hd && (
