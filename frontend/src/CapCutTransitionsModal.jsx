@@ -120,8 +120,8 @@ export default function CapCutTransitionsModal({
           {/* Body */}
           <div className="space-y-4 overflow-y-auto pr-0.5">
             {/* Box Konsep Pengacakan */}
-            <div className="rounded-xl border border-teal-500/25 bg-teal-500/5 p-3.5 flex items-start gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-teal-500/15 text-teal-400 border border-teal-500/30">
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3.5 flex items-start gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/30">
                 <Shuffle size={18} />
               </div>
               <div className="space-y-0.5 min-w-0 flex-1">
@@ -138,10 +138,10 @@ export default function CapCutTransitionsModal({
             <div className="rounded-xl border border-[#292e3b] bg-[#12141a] p-4 space-y-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <Clock size={16} className="text-teal-400" />
+                  <Clock size={16} className="text-amber-400" />
                   <span className="text-xs font-semibold text-slate-200">Durasi Transisi per Panel</span>
                 </div>
-                <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30">
                   <span className="font-mono text-xs font-bold">{duration.toFixed(2)}s</span>
                   <span className="text-[10px] text-slate-400">detik</span>
                 </div>
@@ -155,11 +155,11 @@ export default function CapCutTransitionsModal({
                   step="0.05"
                   value={duration}
                   onChange={(e) => onChangeDuration?.(parseFloat(e.target.value) || 0.5)}
-                  className="w-full accent-teal-400 cursor-pointer h-1.5 bg-[#292e3b] rounded-lg appearance-none"
+                  className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#292e3b] rounded-lg appearance-none"
                 />
                 <div className="flex justify-between text-[11px] font-mono text-slate-400">
                   <span>0.10s (Minimal)</span>
-                  <span className="text-teal-400 font-semibold">0.50s (Rekomendasi)</span>
+                  <span className="text-amber-400 font-semibold">0.50s (Rekomendasi)</span>
                   <span>1.00s (Maksimal)</span>
                 </div>
               </div>
@@ -175,8 +175,8 @@ export default function CapCutTransitionsModal({
                       type="button"
                       className={`px-2.5 py-1 rounded-md text-[11px] font-mono transition border cursor-pointer ${
                         isActive
-                          ? "border-teal-500 bg-teal-500/20 text-teal-300 font-bold shadow-xs"
-                          : "border-[#292e3b] text-slate-400 hover:text-slate-200 hover:bg-[#181c24]"
+                          ? "border-amber-500 bg-amber-500/20 text-amber-300 font-bold shadow-xs"
+                          : "border-[#292e3b] text-slate-400 hover:text-slate-200 hover:bg-[#1e222b]"
                       }`}
                       onClick={() => onChangeDuration?.(p.val)}
                     >
@@ -192,9 +192,9 @@ export default function CapCutTransitionsModal({
               {/* Action Toolbar */}
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <Layers size={16} className="text-teal-400" />
+                  <Layers size={16} className="text-amber-400" />
                   <span className="text-xs font-semibold text-slate-200">Pilih Transisi Favorit</span>
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-500/15 text-teal-300 border border-teal-500/30 font-mono">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono">
                     {selectedTransitions.length} dari {transitions.length} Aktif
                   </span>
                 </div>
@@ -203,15 +203,15 @@ export default function CapCutTransitionsModal({
                   <button
                     type="button"
                     onClick={handleSelectAll}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-[#292e3b] bg-[#12141a] text-slate-200 hover:bg-[#181c24] hover:border-teal-500/50 transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-[#292e3b] bg-[#12141a] text-slate-200 hover:bg-[#1e222b] hover:border-amber-500/50 transition cursor-pointer"
                   >
-                    <CheckSquare size={13} className="text-teal-400" />
+                    <CheckSquare size={13} className="text-amber-400" />
                     <span>Pilih Semua</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleDeselectAll}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-[#292e3b] bg-[#12141a] text-slate-200 hover:bg-[#181c24] transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-[#292e3b] bg-[#12141a] text-slate-200 hover:bg-[#1e222b] transition cursor-pointer"
                   >
                     <Square size={13} className="text-slate-400" />
                     <span>Batalkan Semua</span>
@@ -220,7 +220,7 @@ export default function CapCutTransitionsModal({
                     type="button"
                     onClick={handleReset}
                     title="Reset ke pilihan default"
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-[#292e3b] bg-[#12141a] text-slate-400 hover:text-slate-200 hover:bg-[#181c24] transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-[#292e3b] bg-[#12141a] text-slate-400 hover:text-slate-200 hover:bg-[#1e222b] transition cursor-pointer"
                   >
                     <RotateCcw size={13} />
                     <span>Reset</span>
@@ -238,8 +238,8 @@ export default function CapCutTransitionsModal({
                       onClick={() => toggleTransition(t.name)}
                       className={`group relative flex items-center justify-between gap-3 p-3 rounded-xl border transition cursor-pointer select-none ${
                         active
-                          ? "border-teal-500/60 bg-teal-500/10 ring-1 ring-teal-500/30 shadow-xs"
-                          : "border-[#292e3b] bg-[#12141a] hover:bg-[#181c24] opacity-75 hover:opacity-100"
+                          ? "border-amber-500/60 bg-amber-500/10 ring-1 ring-amber-500/30 shadow-xs"
+                          : "border-[#292e3b] bg-[#12141a] hover:bg-[#1e222b] opacity-75 hover:opacity-100"
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -247,8 +247,8 @@ export default function CapCutTransitionsModal({
                         <div
                           className={`flex size-4.5 shrink-0 items-center justify-center rounded-md border transition ${
                             active
-                              ? "border-teal-500 bg-teal-500 text-slate-950"
-                              : "border-[#3e4556] bg-[#181c24] group-hover:border-teal-500/60"
+                              ? "border-amber-500 bg-amber-500 text-slate-950"
+                              : "border-[#3e4556] bg-[#1e222b] group-hover:border-amber-500/60"
                           }`}
                         >
                           {active && <Check size={12} className="stroke-[3]" />}
@@ -274,8 +274,8 @@ export default function CapCutTransitionsModal({
                         <span
                           className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
                             active
-                              ? "bg-teal-500/20 text-teal-300 border-teal-500/30"
-                              : "bg-[#181c24] text-slate-500 border-[#292e3b]"
+                              ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                              : "bg-[#1e222b] text-slate-500 border-[#292e3b]"
                           }`}
                         >
                           {active ? "Aktif" : "Off"}
@@ -296,7 +296,7 @@ export default function CapCutTransitionsModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex items-center gap-1.5 rounded-xl bg-teal-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-teal-400 transition shadow-lg shadow-teal-500/20 cursor-pointer"
+              className="btn-primary px-4 py-2 text-xs flex items-center gap-1.5 cursor-pointer"
             >
               <Check size={14} className="stroke-[2.5]" />
               <span>Tutup &amp; Simpan</span>

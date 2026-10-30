@@ -270,15 +270,15 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                       <label
                         className={`flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 transition border ${
                           enableZoom
-                            ? "bg-[#181c24] border-teal-500/40 text-slate-100"
-                            : "border-[#292e3b]/60 hover:bg-[#181c24]/50 text-slate-300"
+                            ? "bg-[#1e222b] border-amber-500/40 text-slate-100"
+                            : "border-[#292e3b]/60 hover:bg-[#1e222b]/50 text-slate-300"
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={enableZoom}
                           onChange={(e) => setEnableZoom(e.target.checked)}
-                          className="mt-0.5 size-4 accent-teal-400 cursor-pointer rounded"
+                          className="mt-0.5 size-4 accent-amber-500 cursor-pointer rounded"
                         />
                         <div>
                           <span className="block text-xs font-medium text-slate-200">Animasi Zoom</span>
@@ -291,15 +291,15 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                       <label
                         className={`flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 transition border ${
                           enablePan
-                            ? "bg-[#181c24] border-teal-500/40 text-slate-100"
-                            : "border-[#292e3b]/60 hover:bg-[#181c24]/50 text-slate-300"
+                            ? "bg-[#1e222b] border-amber-500/40 text-slate-100"
+                            : "border-[#292e3b]/60 hover:bg-[#1e222b]/50 text-slate-300"
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={enablePan}
                           onChange={(e) => setEnablePan(e.target.checked)}
-                          className="mt-0.5 size-4 accent-teal-400 cursor-pointer rounded"
+                          className="mt-0.5 size-4 accent-amber-500 cursor-pointer rounded"
                         />
                         <div>
                           <span className="block text-xs font-medium text-slate-200">Animasi Pan</span>
@@ -331,7 +331,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                               max="1.50"
                               value={zoomRatio}
                               onChange={(e) => setZoomRatio(parseFloat(e.target.value) || 1.15)}
-                              className="w-16 rounded-lg border border-[#292e3b] bg-[#0d0f14] px-2 py-1 text-center font-mono text-xs text-slate-100 outline-none focus:border-teal-500"
+                              className="w-16 rounded-lg border border-[#292e3b] bg-[#0d0f14] px-2 py-1 text-center font-mono text-xs text-slate-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/40"
                             />
                             <span className="text-xs text-slate-400 font-mono font-medium">x</span>
                           </div>
@@ -348,8 +348,8 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                                 type="button"
                                 className={`px-2.5 py-0.5 rounded-md text-[11px] font-mono transition border cursor-pointer ${
                                   isSelected
-                                    ? "border-teal-500 bg-teal-500/20 text-teal-300 font-bold shadow-xs"
-                                    : "border-[#292e3b] text-slate-400 hover:text-slate-200 hover:bg-[#181c24]"
+                                    ? "border-amber-500 bg-amber-500/20 text-amber-300 font-bold shadow-xs"
+                                    : "border-[#292e3b] text-slate-400 hover:text-slate-200 hover:bg-[#1e222b]"
                                 }`}
                                 onClick={() => setZoomRatio(val)}
                               >
@@ -366,11 +366,11 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                   <div className="rounded-xl border border-[#292e3b] bg-[#12141a] p-3.5 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Shuffle size={14} className="text-teal-400" />
+                        <Shuffle size={14} className="text-amber-400" />
                         <span className="text-xs font-semibold text-slate-200">Transisi Antar Adegan CapCut</span>
                       </div>
                       {enableTransitions ? (
-                        <span className="text-[11px] font-mono text-teal-300 bg-teal-500/10 px-2 py-0.5 rounded-full border border-teal-500/25">
+                        <span className="text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/25">
                           Aktif &bull; {selectedTransitions.length} Efek &bull; {transitionDuration.toFixed(1)}s
                         </span>
                       ) : (
@@ -384,15 +384,15 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                     <label
                       className={`flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 transition border ${
                         enableTransitions
-                          ? "bg-[#181c24] border-teal-500/40 text-slate-100"
-                          : "border-[#292e3b]/60 hover:bg-[#181c24]/50 text-slate-300"
+                          ? "bg-[#1e222b] border-amber-500/40 text-slate-100"
+                          : "border-[#292e3b]/60 hover:bg-[#1e222b]/50 text-slate-300"
                       }`}
                     >
                       <input
                         type="checkbox"
                         checked={enableTransitions}
                         onChange={(e) => setEnableTransitions(e.target.checked)}
-                        className="mt-0.5 size-4 accent-teal-400 shrink-0 cursor-pointer rounded"
+                        className="mt-0.5 size-4 accent-amber-500 shrink-0 cursor-pointer rounded"
                       />
                       <div className="min-w-0 flex-1">
                         <span className="text-xs font-medium text-slate-200 block">
@@ -407,9 +407,9 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                     {/* Detail Controls when enabled */}
                     {enableTransitions && (
                       <div className="space-y-3 pt-1">
-                        <div className="rounded-lg border border-[#292e3b] bg-[#181c24] p-2.5 flex items-center justify-between gap-3">
+                        <div className="rounded-lg border border-[#292e3b] bg-[#1e222b] p-2.5 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-teal-500/15 text-teal-400">
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
                               <Shuffle size={16} />
                             </div>
                             <div className="min-w-0 flex-1">
@@ -426,7 +426,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                             <button
                               type="button"
                               onClick={() => setShowTransitionsModal(true)}
-                              className="flex items-center gap-1.5 rounded-lg border border-teal-500/30 bg-teal-500/10 px-2.5 py-1.5 text-xs font-medium text-teal-300 hover:bg-teal-500/20 hover:border-teal-500/50 transition cursor-pointer"
+                              className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/50 transition cursor-pointer"
                             >
                               <Sliders size={13} />
                               <span>Atur Transisi</span>
