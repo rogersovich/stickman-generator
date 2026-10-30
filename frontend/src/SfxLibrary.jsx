@@ -1,5 +1,5 @@
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
-import { Check, Loader2, Pause, Play, Search, Trash2, Upload, Volume2, X } from "lucide-react";
+import { Check, CloudUpload, Loader2, Pause, Play, Search, Trash2, Volume2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import { useDialog } from "./ui.jsx";
@@ -47,6 +47,7 @@ export default function SfxLibrary({ open, onClose, onChanged, title, selectedId
   const [cat, setCat] = useState("all");
   const [playingId, setPlayingId] = useState(null);
   const [busy, setBusy] = useState("");
+  const [dragging, setDragging] = useState(false);
   const picking = typeof onPick === "function";
 
   async function refresh() {
@@ -91,6 +92,18 @@ export default function SfxLibrary({ open, onClose, onChanged, title, selectedId
       setCat("all");
       await refresh();
     });
+
+  function onDrop(e) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file || busy) return;
+    if (!file.type.startsWith("audio/") && !/\.(mp3|wav|m4a|aac|ogg|opus|flac|aiff?)$/i.test(file.name)) {
+      dialog.alert({ title: "Bukan file audio", message: `"${file.name}" bukan file audio. Pakai MP3, WAV, M4A, OGG, dsb.` });
+      return;
+    }
+    upload(file);
+  }
 
   // volume edits are local while dragging, saved on release
   function setLocalVolume(id, volume) {
@@ -225,7 +238,7 @@ export default function SfxLibrary({ open, onClose, onChanged, title, selectedId
             })}
           </ul>
 
-          <div className="flex flex-wrap items-center gap-2 border-t border-[#292e3b] pt-4">
+          <div className="space-y-2.5 border-t border-[#292e3b] pt-4">
             <input
               ref={fileRef}
               type="file"
@@ -233,14 +246,40 @@ export default function SfxLibrary({ open, onClose, onChanged, title, selectedId
               className="hidden"
               onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
             />
-            <button className="btn-ghost text-xs" onClick={() => fileRef.current?.click()} disabled={!!busy}>
-              {busy === "upload" ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Upload SFX
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              disabled={!!busy}
+              className={`flex w-full items-center justify-center gap-3 rounded-xl border-2 border-dashed px-4 py-4 text-left transition *:pointer-events-none ${
+                dragging
+                  ? "border-amber-400 bg-amber-500/10 text-amber-200"
+                  : "border-[#292e3b] text-slate-400 hover:border-amber-500/50 hover:bg-[#1e222b]/60 hover:text-slate-200"
+              }`}
+            >
+              {busy === "upload" ? (
+                <Loader2 size={22} className="shrink-0 animate-spin text-amber-400" />
+              ) : (
+                <CloudUpload size={22} className="shrink-0 text-amber-400" />
+              )}
+              <span>
+                <span className="block text-sm font-semibold text-slate-200">
+                  {busy === "upload" ? "Mengunggah SFX…" : dragging ? "Lepas file di sini" : "Tarik & lepas file audio, atau klik untuk pilih"}
+                </span>
+                <span className="block text-[11px] text-slate-500">MP3/WAV/M4A/OGG, maksimal 30 detik</span>
+              </span>
             </button>
-            <span className="text-[11px] text-slate-500">MP3/WAV/M4A/OGG, maksimal 30 detik</span>
             {picking && selectedId && (
-              <button className="btn-ghost ml-auto text-xs text-red-300" onClick={() => onPick(null)}>
-                <X size={14} /> Lepas SFX adegan ini
-              </button>
+              <div className="flex justify-end">
+                <button className="btn-ghost text-xs text-red-300" onClick={() => onPick(null)}>
+                  <X size={14} /> Lepas SFX adegan ini
+                </button>
+              </div>
             )}
           </div>
         </DialogPanel>

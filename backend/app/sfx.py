@@ -27,6 +27,9 @@ BUILTINS: list[tuple[str, str, str, str, float]] = [
     ("spawn", "Spawn", "Efek kemunculan karakter atau item.", "transition", 0.3),
     ("camera_flash", "Camera Flash", "Jepretan kamera atau blitz foto.", "transition", 0.3),
     ("dbz_teleport", "DBZ Teleportation", "Teleportasi instan ala Dragon Ball Z.", "transition", 0.3),
+    ("whoosh_3", "Whoosh 3", "Whoosh tegas untuk perpindahan adegan.", "transition", 0.3),
+    ("whoosh_clean", "Whoosh Clean", "Whoosh bersih dan singkat.", "transition", 0.3),
+    ("pop", "Pop", "Letupan singkat saat teks atau item muncul.", "transition", 0.3),
     ("shine_anime", "Shine Anime", "Kilau atau aura menyala ala anime.", "reaction", 0.3),
     ("awkward_moment", "Awkward Moment", "Momen canggung atau kebingungan.", "reaction", 0.3),
     ("awkward_pause_1", "Awkward Pause 1", "Jeda hening canggung.", "reaction", 0.5),
@@ -37,6 +40,8 @@ BUILTINS: list[tuple[str, str, str, str, float]] = [
     ("breast_twitch", "Twitch Sound", "Gerakan kedut cepat.", "reaction", 0.3),
     ("fahh", "Fahh / Sigh", "Desah kaget, heran, atau kagum.", "reaction", 0.25),
     ("munch_bite", "Munch Bite", "Gigitan renyah makanan.", "reaction", 0.3),
+    ("ahh", "Ahh", "Teriakan atau desahan kaget.", "reaction", 0.2),
+    ("ddlc_select", "DDLC Select", "Bunyi pilih menu ala Doki Doki Literature Club.", "reaction", 0.5),
     ("sword_3", "Sword 3", "Denting sabetan pedang tajam.", "action", 0.3),
     ("sword_4", "Sword 4", "Sabetan bilah pedang cepat.", "action", 0.3),
     ("sword_5", "Sword 5", "Benturan keras bentrokan pedang.", "action", 0.3),
@@ -45,9 +50,12 @@ BUILTINS: list[tuple[str, str, str, str, float]] = [
     ("bone_crack", "Bone Crack", "Retakan tulang atau patah keras.", "action", 0.3),
     ("punch_anime", "Punch Anime", "Pukulan telak tinju anime.", "action", 0.25),
     ("anime_5", "Anime Dramatic 5", "Efek dramatis tensi tinggi.", "dramatic", 0.25),
+    ("undertale", "Undertale SFX", "Efek momen dramatis ala Undertale.", "dramatic", 0.3),
+    ("minecraft_cave", "Minecraft Cave", "Suara gua seram ala Minecraft.", "dramatic", 0.5),
     ("bonk", "Bonk Sound", "Pukulan komedi bonk di kepala.", "impact", 0.8),
     ("glass_breaking", "Glass Breaking", "Pecahan kaca dramatis.", "impact", 0.3),
     ("bamboo_hit", "Bamboo Hit", "Hantaman keras kayu bambu.", "impact", 1.0),
+    ("metal_hit", "Metal Hit", "Dentang benturan logam.", "impact", 0.4),
 ]
 _BUILTIN = {b[0]: b for b in BUILTINS}
 _CUSTOM_ID = re.compile(r"sfx_[a-f0-9]{12}")
