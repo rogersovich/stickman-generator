@@ -429,9 +429,25 @@ def test_export_capcut_draft(client, tmp_path):
     img_data = _png(1376, 768)
     client.post(f"/api/jobs/{p['id']}/0/result", json={"image_base64": base64.b64encode(img_data).decode(), "mime": "image/png"})
     
-    # Export CapCut to tmp drafts dir
+    # Verify transitions listing endpoint
+    tr_res = client.get("/api/capcut/transitions")
+    assert tr_res.status_code == 200
+    assert len(tr_res.json()["transitions"]) == 13
+
+    # Export CapCut to tmp drafts dir with custom settings
     drafts_dir = tmp_path / "capcut_drafts"
-    res = client.post(f"/api/projects/{p['id']}/export-capcut", json={"drafts_dir": str(drafts_dir)})
+    res = client.post(
+        f"/api/projects/{p['id']}/export-capcut",
+        json={
+            "drafts_dir": str(drafts_dir),
+            "enable_zoom": True,
+            "enable_pan": False,
+            "zoom_ratio": 1.25,
+            "enable_transitions": True,
+            "transition_duration": 0.35,
+            "allowed_transitions": ["Anime Speed", "Shake"],
+        },
+    )
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "success"

@@ -14,9 +14,12 @@ def export_project_to_capcut(
     drafts_dir: Optional[str] = None,
     project_name: Optional[str] = None,
     ken_burns: bool = True,
+    enable_zoom: bool = True,
+    enable_pan: bool = True,
     zoom_ratio: float = 1.15,
     enable_transitions: bool = True,
     transition_duration: float = 0.5,
+    allowed_transitions: Optional[list[str]] = None,
 ) -> dict:
     p = storage.load(project_id)
     if not p:
@@ -67,10 +70,13 @@ def export_project_to_capcut(
         image_paths=image_items,
         ratio=ratio,
         ken_burns=ken_burns,
+        enable_zoom=enable_zoom,
+        enable_pan=enable_pan,
         zoom_ratio=zoom_ratio,
         canvas_blur=True,
         enable_transitions=enable_transitions,
         transition_duration=transition_duration,
+        allowed_transitions=allowed_transitions,
         audio_tracks=audio_tracks,
     )
 

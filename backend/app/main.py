@@ -481,9 +481,18 @@ class CapCutExportIn(BaseModel):
     drafts_dir: str | None = None
     project_name: str | None = None
     ken_burns: bool = True
+    enable_zoom: bool = True
+    enable_pan: bool = True
     zoom_ratio: float = 1.15
     enable_transitions: bool = True
     transition_duration: float = 0.5
+    allowed_transitions: list[str] | None = None
+
+
+@app.get("/api/capcut/transitions")
+def get_capcut_transitions():
+    from .capcut_transitions import list_transitions
+    return {"transitions": list_transitions()}
 
 
 @app.post("/api/projects/{project_id}/export-capcut")
@@ -495,9 +504,12 @@ def export_capcut(project_id: str, body: CapCutExportIn = CapCutExportIn()):
             drafts_dir=body.drafts_dir,
             project_name=body.project_name,
             ken_burns=body.ken_burns,
+            enable_zoom=body.enable_zoom,
+            enable_pan=body.enable_pan,
             zoom_ratio=body.zoom_ratio,
             enable_transitions=body.enable_transitions,
             transition_duration=body.transition_duration,
+            allowed_transitions=body.allowed_transitions,
         )
     except LookupError as e:
         raise HTTPException(404, str(e))
