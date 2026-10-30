@@ -11,9 +11,9 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "./api.js";
-import CapCutTransitionsModal from "./CapCutTransitionsModal.jsx";
+import CapCutTransitionsModal, { TRANSITIONS_STORAGE_KEY } from "./CapCutTransitionsModal.jsx";
 
 const DEFAULT_TRANSITIONS = [
   "Anime Speed",
@@ -32,6 +32,70 @@ const DEFAULT_TRANSITIONS = [
 ];
 
 const ZOOM_PRESETS = [1.10, 1.15, 1.20, 1.25, 1.30];
+export const OPTS_STORAGE_KEY = "stickman_capcut_export_opts";
+
+function readSavedOpts(project) {
+  // 1. Try project-specific saved export_opts from backend first
+  if (project?.export_opts && typeof project.export_opts === "object") {
+    const p = project.export_opts;
+    return {
+      enableZoom: typeof p.enable_zoom === "boolean" ? p.enable_zoom : true,
+      enablePan: typeof p.enable_pan === "boolean" ? p.enable_pan : true,
+      zoomRatio: typeof p.zoom_ratio === "number" && p.zoom_ratio >= 1.0 ? p.zoom_ratio : 1.15,
+      enableTransitions: typeof p.enable_transitions === "boolean" ? p.enable_transitions : true,
+      transitionDuration: typeof p.transition_duration === "number" && p.transition_duration > 0 ? p.transition_duration : 0.5,
+      selectedTransitions: Array.isArray(p.allowed_transitions) && p.allowed_transitions.length > 0
+        ? p.allowed_transitions
+        : DEFAULT_TRANSITIONS,
+    };
+  }
+
+  // 2. Try global localStorage export options
+  try {
+    const raw = localStorage.getItem(OPTS_STORAGE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      return {
+        enableZoom: typeof p.enable_zoom === "boolean" ? p.enable_zoom : true,
+        enablePan: typeof p.enable_pan === "boolean" ? p.enable_pan : true,
+        zoomRatio: typeof p.zoom_ratio === "number" && p.zoom_ratio >= 1.0 ? p.zoom_ratio : 1.15,
+        enableTransitions: typeof p.enable_transitions === "boolean" ? p.enable_transitions : true,
+        transitionDuration: typeof p.transition_duration === "number" && p.transition_duration > 0 ? p.transition_duration : 0.5,
+        selectedTransitions: Array.isArray(p.allowed_transitions) && p.allowed_transitions.length > 0
+          ? p.allowed_transitions
+          : DEFAULT_TRANSITIONS,
+      };
+    }
+  } catch {}
+
+  // 3. Try transitions modal specific storage key
+  try {
+    const rawTr = localStorage.getItem(TRANSITIONS_STORAGE_KEY);
+    if (rawTr) {
+      const p = JSON.parse(rawTr);
+      return {
+        enableZoom: true,
+        enablePan: true,
+        zoomRatio: 1.15,
+        enableTransitions: true,
+        transitionDuration: typeof p.transition_duration === "number" ? p.transition_duration : 0.5,
+        selectedTransitions: Array.isArray(p.allowed_transitions) && p.allowed_transitions.length > 0
+          ? p.allowed_transitions
+          : DEFAULT_TRANSITIONS,
+      };
+    }
+  } catch {}
+
+  // 4. Default fallback
+  return {
+    enableZoom: true,
+    enablePan: true,
+    zoomRatio: 1.15,
+    enableTransitions: true,
+    transitionDuration: 0.5,
+    selectedTransitions: DEFAULT_TRANSITIONS,
+  };
+}
 
 export default function CapCutExportModal({ open, onClose, project, onExported }) {
   const [projectName, setProjectName] = useState(project.title || project.id);
@@ -48,6 +112,76 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
+
+  // Sync saved options whenever the modal opens or project changes
+  useEffect(() => {
+    if (open) {
+      setProjectName(project.title || project.id);
+      const saved = readSavedOpts(project);
+      setEnableZoom(saved.enableZoom);
+      setEnablePan(saved.enablePan);
+      setZoomRatio(saved.zoomRatio);
+      setEnableTransitions(saved.enableTransitions);
+      setTransitionDuration(saved.transitionDuration);
+      setSelectedTransitions(saved.selectedTransitions);
+      setError(null);
+      setResult(null);
+    }
+  }, [open, project]);
+
+  function persist(partial) {
+    const payload = {
+      enable_zoom: partial.enableZoom !== undefined ? partial.enableZoom : enableZoom,
+      enable_pan: partial.enablePan !== undefined ? partial.enablePan : enablePan,
+      zoom_ratio: partial.zoomRatio !== undefined ? partial.zoomRatio : zoomRatio,
+      enable_transitions: partial.enableTransitions !== undefined ? partial.enableTransitions : enableTransitions,
+      transition_duration: partial.transitionDuration !== undefined ? partial.transitionDuration : transitionDuration,
+      allowed_transitions: partial.selectedTransitions !== undefined ? partial.selectedTransitions : selectedTransitions,
+    };
+
+    // 1. Save to localStorage immediately
+    try {
+      localStorage.setItem(OPTS_STORAGE_KEY, JSON.stringify(payload));
+    } catch {}
+
+    // 2. Save to backend project database/JSON
+    if (project?.id) {
+      api.saveExportOpts(project.id, {
+        ken_burns: payload.enable_zoom || payload.enable_pan,
+        ...payload,
+      }).catch(() => {});
+    }
+  }
+
+  function handleZoomToggle(val) {
+    setEnableZoom(val);
+    persist({ enableZoom: val });
+  }
+
+  function handlePanToggle(val) {
+    setEnablePan(val);
+    persist({ enablePan: val });
+  }
+
+  function handleZoomRatioChange(val) {
+    setZoomRatio(val);
+    persist({ zoomRatio: val });
+  }
+
+  function handleTransitionsToggle(val) {
+    setEnableTransitions(val);
+    persist({ enableTransitions: val });
+  }
+
+  function handleSaveTransitions({ selectedTransitions: nextSelected, duration: nextDuration }) {
+    setSelectedTransitions(nextSelected);
+    setTransitionDuration(nextDuration);
+    persist({
+      selectedTransitions: nextSelected,
+      transitionDuration: nextDuration,
+    });
+    setShowTransitionsModal(false);
+  }
 
   const scenes = project.scenes;
   const total = scenes.length;
@@ -71,17 +205,19 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
   async function handleExport() {
     setExporting(true);
     setError(null);
+    const opts = {
+      project_name: projectName.trim() || project.title || project.id,
+      ken_burns: enableZoom || enablePan,
+      enable_zoom: enableZoom,
+      enable_pan: enablePan,
+      zoom_ratio: zoomRatio,
+      enable_transitions: enableTransitions,
+      transition_duration: transitionDuration,
+      allowed_transitions: selectedTransitions,
+    };
+    persist(opts);
     try {
-      const res = await api.exportCapCut(project.id, {
-        project_name: projectName.trim() || project.title || project.id,
-        ken_burns: enableZoom || enablePan,
-        enable_zoom: enableZoom,
-        enable_pan: enablePan,
-        zoom_ratio: zoomRatio,
-        enable_transitions: enableTransitions,
-        transition_duration: transitionDuration,
-        allowed_transitions: selectedTransitions,
-      });
+      const res = await api.exportCapCut(project.id, opts);
       setResult(res);
       onExported?.(res);
     } catch (e) {
@@ -152,7 +288,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                       <span>Lokasi Folder Draft:</span>
                       <button
                         onClick={copyPath}
-                        className="flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 transition"
+                        className="flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 transition cursor-pointer"
                       >
                         {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
                         {copied ? "Tersalin!" : "Salin Path"}
@@ -280,7 +416,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                             <input
                               type="checkbox"
                               checked={enableZoom}
-                              onChange={(e) => setEnableZoom(e.target.checked)}
+                              onChange={(e) => handleZoomToggle(e.target.checked)}
                               className="mt-0.5 size-4 accent-amber-500 cursor-pointer rounded shrink-0"
                             />
                             <div className="min-w-0">
@@ -301,7 +437,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                             <input
                               type="checkbox"
                               checked={enablePan}
-                              onChange={(e) => setEnablePan(e.target.checked)}
+                              onChange={(e) => handlePanToggle(e.target.checked)}
                               className="mt-0.5 size-4 accent-amber-500 cursor-pointer rounded shrink-0"
                             />
                             <div className="min-w-0">
@@ -334,7 +470,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                                 min="1.05"
                                 max="1.50"
                                 value={zoomRatio}
-                                onChange={(e) => setZoomRatio(parseFloat(e.target.value) || 1.15)}
+                                onChange={(e) => handleZoomRatioChange(parseFloat(e.target.value) || 1.15)}
                                 className="w-16 rounded-lg border border-[#292e3b] bg-[#0d0f14] px-2 py-1 text-center font-mono text-xs text-slate-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/40"
                               />
                               <span className="text-xs text-slate-400 font-mono font-medium">x</span>
@@ -355,7 +491,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                                       ? "border-amber-500 bg-amber-500/20 text-amber-300 font-bold shadow-xs"
                                       : "border-[#292e3b] text-slate-400 hover:text-slate-200 hover:bg-[#1e222b]"
                                   }`}
-                                  onClick={() => setZoomRatio(val)}
+                                  onClick={() => handleZoomRatioChange(val)}
                                 >
                                   {val.toFixed(2)}x
                                 </button>
@@ -400,7 +536,7 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
                           <input
                             type="checkbox"
                             checked={enableTransitions}
-                            onChange={(e) => setEnableTransitions(e.target.checked)}
+                            onChange={(e) => handleTransitionsToggle(e.target.checked)}
                             className="mt-0.5 size-4 accent-amber-500 shrink-0 cursor-pointer rounded"
                           />
                           <div className="min-w-0 flex-1">
@@ -491,9 +627,8 @@ export default function CapCutExportModal({ open, onClose, project, onExported }
         open={showTransitionsModal}
         onClose={() => setShowTransitionsModal(false)}
         selectedTransitions={selectedTransitions}
-        onChangeTransitions={setSelectedTransitions}
+        onSave={handleSaveTransitions}
         duration={transitionDuration}
-        onChangeDuration={setTransitionDuration}
       />
     </>
   );

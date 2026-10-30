@@ -495,6 +495,24 @@ def get_capcut_transitions():
     return {"transitions": list_transitions()}
 
 
+class ExportOptsIn(BaseModel):
+    ken_burns: bool = True
+    enable_zoom: bool = True
+    enable_pan: bool = True
+    zoom_ratio: float = 1.15
+    enable_transitions: bool = True
+    transition_duration: float = 0.5
+    allowed_transitions: list[str] | None = None
+
+
+@app.put("/api/projects/{project_id}/export-opts")
+def save_export_opts(project_id: str, body: ExportOptsIn):
+    p = _get(project_id)
+    p.export_opts = body.model_dump()
+    storage.save(p)
+    return _out(p)
+
+
 @app.post("/api/projects/{project_id}/export-capcut")
 def export_capcut(project_id: str, body: CapCutExportIn = CapCutExportIn()):
     try:

@@ -55,6 +55,8 @@ class Project(BaseModel):
     test_limit: int | None = None
     voice_id: str | None = None  # None = default voice from settings
     tts_model: TtsModel | None = None  # None = default model from settings
+    export_opts: dict | None = None  # CapCut / video export settings
+    last_capcut_draft: dict | None = None  # Record of last successful CapCut export
     scenes: list[Scene] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)

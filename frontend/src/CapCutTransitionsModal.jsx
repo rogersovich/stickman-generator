@@ -36,15 +36,32 @@ const PRESET_DURATIONS = [
   { val: 1.00, label: "1.00s (Maksimal)" },
 ];
 
+export const TRANSITIONS_STORAGE_KEY = "stickman_capcut_transitions_pref";
+
 export default function CapCutTransitionsModal({
   open,
   onClose,
   selectedTransitions = [],
-  onChangeTransitions,
+  onSave,
   duration = 0.5,
-  onChangeDuration,
 }) {
   const [transitions, setTransitions] = useState(DEFAULT_TRANSITIONS);
+  const [localSelected, setLocalSelected] = useState(selectedTransitions);
+  const [localDuration, setLocalDuration] = useState(duration);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Sync incoming props whenever modal opens
+  useEffect(() => {
+    if (open) {
+      setLocalSelected(
+        Array.isArray(selectedTransitions) && selectedTransitions.length > 0
+          ? selectedTransitions
+          : DEFAULT_TRANSITIONS.map((t) => t.name)
+      );
+      setLocalDuration(typeof duration === "number" ? duration : 0.5);
+      setSavedSuccess(false);
+    }
+  }, [open, selectedTransitions, duration]);
 
   useEffect(() => {
     let ignore = false;
@@ -64,34 +81,58 @@ export default function CapCutTransitionsModal({
     };
   }, []);
 
-  const isChecked = (name) => selectedTransitions.includes(name);
+  const isChecked = (name) => localSelected.includes(name);
 
   function toggleTransition(name) {
-    if (selectedTransitions.includes(name)) {
-      if (selectedTransitions.length > 1) {
-        onChangeTransitions?.(selectedTransitions.filter((n) => n !== name));
+    if (localSelected.includes(name)) {
+      if (localSelected.length > 1) {
+        setLocalSelected(localSelected.filter((n) => n !== name));
       }
     } else {
-      onChangeTransitions?.([...selectedTransitions, name]);
+      setLocalSelected([...localSelected, name]);
     }
   }
 
   function handleSelectAll() {
-    onChangeTransitions?.(transitions.map((t) => t.name));
+    setLocalSelected(transitions.map((t) => t.name));
   }
 
   function handleDeselectAll() {
     const first = transitions[0]?.name || "Anime Speed";
-    onChangeTransitions?.([first]);
+    setLocalSelected([first]);
   }
 
   function handleReset() {
-    onChangeTransitions?.(transitions.map((t) => t.name));
-    onChangeDuration?.(0.5);
+    setLocalSelected(transitions.map((t) => t.name));
+    setLocalDuration(0.5);
+  }
+
+  function handleSaveAndClose() {
+    // 1. Persist directly to localStorage
+    try {
+      localStorage.setItem(
+        TRANSITIONS_STORAGE_KEY,
+        JSON.stringify({
+          allowed_transitions: localSelected,
+          transition_duration: localDuration,
+        })
+      );
+    } catch {}
+
+    // 2. Call parent onSave callback
+    onSave?.({
+      selectedTransitions: localSelected,
+      duration: localDuration,
+    });
+
+    setSavedSuccess(true);
+    setTimeout(() => {
+      onClose();
+    }, 150);
   }
 
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-60">
+    <Dialog open={open} onClose={handleSaveAndClose} className="relative z-60">
       <DialogBackdrop transition className="fixed inset-0 bg-black/80 backdrop-blur-xs duration-150 data-closed:opacity-0" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <DialogPanel
@@ -110,8 +151,9 @@ export default function CapCutTransitionsModal({
             </div>
             <button
               className="rounded-lg p-1.5 text-slate-400 hover:bg-[#1e222b] hover:text-slate-200 transition"
-              onClick={onClose}
-              aria-label="Tutup"
+              onClick={handleSaveAndClose}
+              aria-label="Tutup dan simpan"
+              title="Tutup dan simpan"
             >
               <X size={18} />
             </button>
@@ -142,7 +184,7 @@ export default function CapCutTransitionsModal({
                   <span className="text-xs font-semibold text-slate-200">Durasi Transisi per Panel</span>
                 </div>
                 <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                  <span className="font-mono text-xs font-bold">{duration.toFixed(2)}s</span>
+                  <span className="font-mono text-xs font-bold">{localDuration.toFixed(2)}s</span>
                   <span className="text-[10px] text-slate-400">detik</span>
                 </div>
               </div>
@@ -153,8 +195,8 @@ export default function CapCutTransitionsModal({
                   min="0.10"
                   max="1.00"
                   step="0.05"
-                  value={duration}
-                  onChange={(e) => onChangeDuration?.(parseFloat(e.target.value) || 0.5)}
+                  value={localDuration}
+                  onChange={(e) => setLocalDuration(parseFloat(e.target.value) || 0.5)}
                   className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#292e3b] rounded-lg appearance-none"
                 />
                 <div className="flex justify-between text-[11px] font-mono text-slate-400">
@@ -168,7 +210,7 @@ export default function CapCutTransitionsModal({
               <div className="flex items-center gap-1.5 pt-1 border-t border-[#292e3b]/60 flex-wrap">
                 <span className="text-[11px] text-slate-400 mr-1">Preset Cepat:</span>
                 {PRESET_DURATIONS.map((p) => {
-                  const isActive = Math.abs((duration ?? 0.5) - p.val) < 0.01;
+                  const isActive = Math.abs((localDuration ?? 0.5) - p.val) < 0.01;
                   return (
                     <button
                       key={p.val}
@@ -178,9 +220,9 @@ export default function CapCutTransitionsModal({
                           ? "border-amber-500 bg-amber-500/20 text-amber-300 font-bold shadow-xs"
                           : "border-[#292e3b] text-slate-400 hover:text-slate-200 hover:bg-[#1e222b]"
                       }`}
-                      onClick={() => onChangeDuration?.(p.val)}
+                      onClick={() => setLocalDuration(p.val)}
                     >
-                      {p.label}
+                      {{ ...p }.label}
                     </button>
                   );
                 })}
@@ -195,7 +237,7 @@ export default function CapCutTransitionsModal({
                   <Layers size={16} className="text-amber-400" />
                   <span className="text-xs font-semibold text-slate-200">Pilih Transisi Favorit</span>
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono">
-                    {selectedTransitions.length} dari {transitions.length} Aktif
+                    {localSelected.length} dari {transitions.length} Aktif
                   </span>
                 </div>
 
@@ -290,16 +332,16 @@ export default function CapCutTransitionsModal({
 
           {/* Footer */}
           <div className="flex items-center justify-between border-t border-[#292e3b] pt-3">
-            <span className="text-xs text-slate-400">
-              {selectedTransitions.length} transisi dipilih • durasi {duration.toFixed(2)}s
+            <span className="text-xs text-slate-400 font-mono">
+              {localSelected.length} transisi dipilih • durasi {localDuration.toFixed(2)}s
             </span>
             <button
               type="button"
-              onClick={onClose}
-              className="btn-primary px-4 py-2 text-xs flex items-center gap-1.5 cursor-pointer"
+              onClick={handleSaveAndClose}
+              className="btn-primary px-4 py-2 text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-amber-500/20"
             >
               <Check size={14} className="stroke-[2.5]" />
-              <span>Tutup &amp; Simpan</span>
+              <span>{savedSuccess ? "Tersimpan!" : "Tutup & Simpan"}</span>
             </button>
           </div>
         </DialogPanel>

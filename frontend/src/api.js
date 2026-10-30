@@ -50,6 +50,7 @@ export const api = {
   audioUrl: (id, file, v) => `/files/${id}/${file}?v=${encodeURIComponent(v ?? "")}`,
   downloadUrl: (id) => `/api/projects/${id}/download`,
   exportCapCut: (id, options = {}) => request("POST", `/api/projects/${id}/export-capcut`, options),
+  saveExportOpts: (id, data) => request("PUT", `/api/projects/${id}/export-opts`, data),
   capcutTransitions: () => request("GET", "/api/capcut/transitions"),
   fileUrl: (id, name, v) => `/files/${id}/${name}?v=${encodeURIComponent(v ?? "")}`,
 };

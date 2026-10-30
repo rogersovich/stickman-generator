@@ -455,3 +455,27 @@ def test_export_capcut_draft(client, tmp_path):
     assert Path(data["draft_path"]).exists()
     assert (Path(data["draft_path"]) / "draft_info.json").exists()
 
+    # Verify project has saved export_opts and last_capcut_draft
+    p_after = client.get(f"/api/projects/{p['id']}").json()
+    assert p_after["last_capcut_draft"] is not None
+    assert p_after["last_capcut_draft"]["draft_name"] == data["draft_name"]
+    assert p_after["export_opts"] is not None
+    assert p_after["export_opts"]["zoom_ratio"] == 1.25
+
+    # Test explicit PUT /api/projects/{id}/export-opts
+    put_res = client.put(
+        f"/api/projects/{p['id']}/export-opts",
+        json={
+            "enable_zoom": True,
+            "enable_pan": True,
+            "zoom_ratio": 1.30,
+            "enable_transitions": True,
+            "transition_duration": 0.7,
+            "allowed_transitions": ["Anime Speed"],
+        },
+    )
+    assert put_res.status_code == 200
+    p_updated = put_res.json()
+    assert p_updated["export_opts"]["zoom_ratio"] == 1.30
+    assert p_updated["export_opts"]["transition_duration"] == 0.7
+

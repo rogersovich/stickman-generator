@@ -1,8 +1,10 @@
 import {
   AlertCircle,
   AudioLines,
+  Check,
   CheckCircle2,
   Clapperboard,
+  Copy,
   Download,
   FileArchive,
   Film,
@@ -17,10 +19,32 @@ import CapCutExportModal from "./CapCutExportModal.jsx";
 
 const fmtSec = (s) => `${s.toFixed(1).replace(".", ",")} dtk`;
 
-export default function ExportView({ project }) {
-  const [filter, setFilter] = useState("all"); // 'all' | 'ready' | 'missing'
+export default function ExportView({ project, setProject }) {
+  const [filter, setFilter] = useState(() => {
+    try {
+      return localStorage.getItem("stickman.export.filter") || "all";
+    } catch {
+      return "all";
+    }
+  });
   const [capcutModalOpen, setCapcutModalOpen] = useState(false);
   const [draftResult, setDraftResult] = useState(null);
+  const [draftDismissed, setDraftDismissed] = useState(false);
+  const [copiedDraft, setCopiedDraft] = useState(false);
+
+  function handleFilterChange(f) {
+    setFilter(f);
+    try {
+      localStorage.setItem("stickman.export.filter", f);
+    } catch {}
+  }
+
+  function copyDraftPath(p) {
+    if (!p) return;
+    navigator.clipboard.writeText(p);
+    setCopiedDraft(true);
+    setTimeout(() => setCopiedDraft(false), 2000);
+  }
 
   const id = project.id;
   const scenes = project.scenes;
@@ -34,6 +58,8 @@ export default function ExportView({ project }) {
   const totalAudioSec = scenes.reduce((sum, s) => sum + (s.audio_status === "done" ? s.audio_duration ?? 0 : 0), 0);
   const totalMin = Math.floor(totalAudioSec / 60);
   const totalRemSec = Math.round(totalAudioSec % 60);
+
+  const activeDraft = draftResult || project.last_capcut_draft;
 
   // Auto-dismiss the inline notification banner after 10 seconds
   useEffect(() => {
@@ -85,18 +111,35 @@ export default function ExportView({ project }) {
           </div>
         </div>
 
-        {/* Dismissable Inline Notification Banner */}
-        {draftResult && (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200 flex items-center justify-between gap-3 animate-in fade-in duration-200">
-            <div className="flex items-center gap-2.5 min-w-0">
+        {/* Persistent & Dismissable Active CapCut Draft Banner */}
+        {activeDraft && !draftDismissed && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-200 flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-              <span className="truncate">
-                Draft CapCut siap: <b className="text-slate-100 font-mono">{draftResult.draft_name}</b> ({draftResult.exported_images} gambar, {draftResult.exported_audios} audio) — buka aplikasi CapCut Desktop untuk melihat timeline.
-              </span>
+              <div className="min-w-0">
+                <span>
+                  Draft CapCut aktif: <b className="text-slate-100 font-mono">{activeDraft.draft_name}</b> ({activeDraft.exported_images} gambar, {activeDraft.exported_audios} audio)
+                </span>
+                {activeDraft.draft_path && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-mono text-[11px] text-slate-400 truncate max-w-md">
+                      {activeDraft.draft_path}
+                    </span>
+                    <button
+                      onClick={() => copyDraftPath(activeDraft.draft_path)}
+                      className="flex items-center gap-1 font-mono text-[11px] text-amber-400 hover:text-amber-300 transition shrink-0 cursor-pointer"
+                      title="Salin path folder draft CapCut"
+                    >
+                      {copiedDraft ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                      <span>{copiedDraft ? "Tersalin!" : "Salin Path"}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <button
-              onClick={() => setDraftResult(null)}
-              className="rounded-lg p-1 text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-100 transition shrink-0"
+              onClick={() => setDraftDismissed(true)}
+              className="rounded-lg p-1 text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-100 transition shrink-0 self-start"
               title="Tutup notifikasi"
               aria-label="Tutup notifikasi"
             >
@@ -155,19 +198,19 @@ export default function ExportView({ project }) {
             <div className="flex rounded-lg border border-[#292e3b] bg-[#12141a] p-0.5 text-xs">
               <button
                 className={`rounded px-2.5 py-1 ${filter === "all" ? "bg-amber-500/20 text-amber-300 font-semibold" : "text-slate-400 hover:text-slate-200"}`}
-                onClick={() => setFilter("all")}
+                onClick={() => handleFilterChange("all")}
               >
                 Semua ({total})
               </button>
               <button
                 className={`rounded px-2.5 py-1 ${filter === "ready" ? "bg-emerald-500/20 text-emerald-300 font-semibold" : "text-slate-400 hover:text-slate-200"}`}
-                onClick={() => setFilter("ready")}
+                onClick={() => handleFilterChange("ready")}
               >
                 Siap Rakit ({readyDone})
               </button>
               <button
                 className={`rounded px-2.5 py-1 ${filter === "missing" ? "bg-red-500/20 text-red-300 font-semibold" : "text-slate-400 hover:text-slate-200"}`}
-                onClick={() => setFilter("missing")}
+                onClick={() => handleFilterChange("missing")}
               >
                 Belum Lengkap ({total - readyDone})
               </button>

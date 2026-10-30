@@ -87,7 +87,8 @@ def export_project_to_capcut(
     except Exception:
         pass
 
-    return {
+    # Persist export options and draft record into project
+    result = {
         "status": "success",
         "draft_name": draft_name,
         "draft_path": str(draft_path),
@@ -96,6 +97,23 @@ def export_project_to_capcut(
         "exported_audios": len(audio_tracks),
         "total_duration_s": round(current_time_s, 2),
     }
+
+    try:
+        p.export_opts = {
+            "ken_burns": ken_burns,
+            "enable_zoom": enable_zoom,
+            "enable_pan": enable_pan,
+            "zoom_ratio": zoom_ratio,
+            "enable_transitions": enable_transitions,
+            "transition_duration": transition_duration,
+            "allowed_transitions": allowed_transitions,
+        }
+        p.last_capcut_draft = result
+        storage.save(p)
+    except Exception:
+        pass
+
+    return result
 
 
 def _format_srt_time(seconds: float) -> str:
