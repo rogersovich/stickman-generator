@@ -39,6 +39,7 @@ export const api = {
   redownloadAll: (id) => request("POST", `/api/projects/${id}/redownload`),
   redownload: (id, i) => request("POST", `/api/projects/${id}/scenes/${i}/redownload`),
   voices: () => request("GET", "/api/voices"),
+  storageStatus: () => request("GET", "/api/storage/status"),
   generateAudio: (id, voiceId = "suara-1", force = false) => request("POST", `/api/projects/${id}/generate-audio?voice_id=${encodeURIComponent(voiceId)}&force=${force}`),
   generateSceneAudio: (id, i, voiceId = "suara-1") => request("POST", `/api/projects/${id}/scenes/${i}/generate-audio?voice_id=${encodeURIComponent(voiceId)}`),
   stopAudio: (id) => request("POST", `/api/projects/${id}/stop-audio`),

@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import config, db, settings, storage
+from . import config, db, r2, settings, storage
 from .models import Project, Scene, now_iso
 from .styles import build_prompt
 
@@ -137,7 +137,13 @@ def _store(project_id: str, index: int, ext: str, write, note: str | None, hd: b
         for old in d.glob(f"scene_{index + 1:03d}.*"):  # drop a previous version with another extension
             old.unlink()
         name = f"scene_{index + 1:03d}.{ext}"
-        write(d / name)
+        target_path = d / name
+        write(target_path)
+        if config.has_r2():
+            try:
+                r2.upload_file(target_path, f"projects/{project_id}/{name}")
+            except Exception:
+                pass
         s = p.scenes[index]
         s.image_status, s.image_file, s.error, s.image_hd, s.job_kind = "done", name, note, hd, "generate"
         if flow_src:

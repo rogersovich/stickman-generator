@@ -129,11 +129,28 @@ def main():
             out_file = project_dir / out_filename
             sf.write(str(out_file), audio_arr, voice.sample_rate)
 
+            # Upload audio to Cloudflare R2 if configured
+            try:
+                from app import config, r2
+                if config.has_r2():
+                    r2.upload_file(out_file, f"projects/{project_dir.name}/{out_filename}")
+            except Exception:
+                pass
+
             audio_len_s = len(audio_arr) / float(voice.sample_rate)
             scene["audio_file"] = out_filename
             scene["audio_status"] = "done"
             scene["audio_error"] = None
             save_project_atomic(project_json_path, project_data)
+
+            # Sync project status to D1
+            try:
+                from app import config, d1
+                from app.models import Project
+                if config.has_d1():
+                    d1.save_project(Project.model_validate(project_data))
+            except Exception:
+                pass
 
             print(f"[TTS] [OK] Scene #{idx+1} selesai ({audio_len_s:.2f}s audio dalam {gen_dur:.2f}s) -> {out_filename}")
 

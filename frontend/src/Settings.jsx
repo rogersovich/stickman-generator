@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Clock, Cpu, HardDrive, Info, Layers, Lock, Save, Sliders, Volume2 } from "lucide-react";
+import { AlertCircle, Check, Clock, Cloud, Copy, Cpu, Database, HardDrive, Info, Layers, Lock, Save, Sliders, Volume2 } from "lucide-react";
 import { api } from "./api.js";
 import { ChoiceCards, Select, Toggle } from "./ui.jsx";
 
@@ -79,6 +79,8 @@ export default function Settings() {
   const [settings, setSettings] = useState(null);
   const [models, setModels] = useState([]);
   const [styles, setStyles] = useState([]);
+  const [storageStatus, setStorageStatus] = useState(null);
+  const [copiedRclone, setCopiedRclone] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -87,6 +89,7 @@ export default function Settings() {
     api.settings().then(setSettings).catch((e) => setMessage({ error: true, text: e.message }));
     api.config().then((c) => setModels(c.models)).catch(() => {});
     api.styles().then(setStyles).catch(() => {});
+    api.storageStatus().then(setStorageStatus).catch(() => {});
   }, []);
 
   if (!settings) return <p className="p-8 text-center font-mono text-sm text-slate-400">{message?.text ?? "Memuat konfigurasi studio…"}</p>;
@@ -266,6 +269,159 @@ export default function Settings() {
               ]}
             />
           </Field>
+        </div>
+      </Section>
+
+      <Section
+        title="Penyimpanan Cloud Multi-Device (Cloudflare D1 & R2)"
+        desc="Sinkronisasi database D1 dan media object storage R2 agar proyek dan aset otomatis sinkron antara Mac dan Windows."
+        icon={Cloud}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* D1 Database Status */}
+          <div className="rounded-lg border border-[#292e3b] bg-[#12141a] p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+                <Database size={16} className="text-sky-400" />
+                <span>Database SQLite (Cloudflare D1)</span>
+              </div>
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  storageStatus?.d1_active
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                    : "bg-slate-800 text-slate-400 border border-slate-700"
+                }`}
+              >
+                <span className={`size-1.5 rounded-full ${storageStatus?.d1_active ? "bg-emerald-400" : "bg-slate-400"}`} />
+                {storageStatus?.d1_active ? "Terhubung (Edge)" : "Lokal SQLite"}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Menyimpan naskah, struktur scene, dan prompt. Data otomatis sinkron instan antar laptop Mac dan PC Windows.
+            </p>
+            {storageStatus?.d1_database_id && (
+              <p className="font-mono text-[11px] text-slate-400 truncate">
+                ID: {storageStatus.d1_database_id}
+              </p>
+            )}
+          </div>
+
+          {/* R2 Storage Status */}
+          <div className="rounded-lg border border-[#292e3b] bg-[#12141a] p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+                <Cloud size={16} className="text-amber-400" />
+                <span>Object Storage (Cloudflare R2)</span>
+              </div>
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  storageStatus?.r2_active
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                    : "bg-slate-800 text-slate-400 border border-slate-700"
+                }`}
+              >
+                <span className={`size-1.5 rounded-full ${storageStatus?.r2_active ? "bg-emerald-400" : "bg-slate-400"}`} />
+                {storageStatus?.r2_active ? "Terhubung (S3 API)" : "Nonaktif (Lokal Disk)"}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Tempat menyimpan gambar 2K dan file audio narasi TTS. Kuota gratis 10 GB dengan bebas biaya bandwidth keluar (Zero Egress).
+            </p>
+            {storageStatus?.r2_bucket && (
+              <p className="font-mono text-[11px] text-slate-400">
+                Bucket: <span className="text-amber-300">{storageStatus.r2_bucket}</span>
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* R2 Usage Meter */}
+        {storageStatus?.r2_stats && (
+          <div className="rounded-lg border border-[#292e3b] bg-[#12141a] p-4 space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-slate-300">Penggunaan Kuota Free Tier R2 (Maks 10 GB)</span>
+              <span className="font-mono text-slate-400">
+                <b className="text-amber-300">{storageStatus.r2_stats.used_mb} MB</b> / 10,000 MB ({storageStatus.r2_stats.percent_used}%)
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-[#1b1e26]">
+              <div
+                className={`h-full transition-all duration-500 ${
+                  storageStatus.r2_stats.percent_used > 85
+                    ? "bg-red-500"
+                    : storageStatus.r2_stats.percent_used > 60
+                    ? "bg-amber-500"
+                    : "bg-emerald-500"
+                }`}
+                style={{ width: `${Math.min(100, Math.max(1, storageStatus.r2_stats.percent_used))}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span>{storageStatus.r2_stats.total_objects} total objek media tersimpan di cloud</span>
+              <span>Sisa kuota gratis: {Math.max(0, 10 - storageStatus.r2_stats.used_gb).toFixed(2)} GB</span>
+            </div>
+          </div>
+        )}
+
+        {/* 30 Projects Cap & GDrive Backup Recommendation */}
+        <div className="rounded-lg border border-[#292e3b] bg-[#12141a] p-4 space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-slate-300">Akumulasi Project Aktif di Cloud</span>
+            <span className="font-mono text-slate-400">
+              <b className={storageStatus?.needs_backup ? "text-amber-400" : "text-slate-200"}>
+                {storageStatus?.total_projects ?? 0}
+              </b>{" "}
+              / {storageStatus?.backup_threshold ?? 30} proyek rekomendasi
+            </span>
+          </div>
+
+          <div className="h-2 w-full overflow-hidden rounded-full bg-[#1b1e26]">
+            <div
+              className={`h-full transition-all duration-500 ${
+                (storageStatus?.total_projects ?? 0) >= (storageStatus?.backup_threshold ?? 30)
+                  ? "bg-amber-400"
+                  : "bg-sky-500"
+              }`}
+              style={{
+                width: `${Math.min(100, (((storageStatus?.total_projects ?? 0) / (storageStatus?.backup_threshold ?? 30)) * 100))}%`,
+              }}
+            />
+          </div>
+
+          {storageStatus?.needs_backup && (
+            <div className="flex items-start gap-2.5 rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200 leading-relaxed">
+              <AlertCircle size={16} className="shrink-0 text-amber-400 mt-0.5" />
+              <div>
+                <b>Batas 30 Proyek Tercapai:</b> Proyek yang sudah selesai dan tayang di YouTube disarankan untuk di-backup ke Google Drive via <code>rclone</code>, kemudian dibersihkan dari R2 agar ruang cloud tetap leluasa.
+              </div>
+            </div>
+          )}
+
+          {storageStatus?.rclone_backup_command && (
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-300">Perintah Backup Rclone (R2 → Google Drive)</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(storageStatus.rclone_backup_command);
+                    setCopiedRclone(true);
+                    setTimeout(() => setCopiedRclone(false), 2000);
+                  }}
+                  className="flex items-center gap-1 text-[11px] font-medium text-amber-400 hover:text-amber-300"
+                >
+                  {copiedRclone ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                  <span>{copiedRclone ? "Tersalin!" : "Salin Perintah"}</span>
+                </button>
+              </div>
+              <pre className="rounded bg-[#0c0d12] border border-[#21242d] p-3 text-[11px] font-mono text-slate-300 overflow-x-auto whitespace-pre-wrap break-all select-all">
+                {storageStatus.rclone_backup_command}
+              </pre>
+              <p className="text-[11px] text-slate-400">
+                Jalankan perintah ini di Terminal Mac atau PowerShell Windows untuk menyalin seluruh aset R2 ke Google Drive kamu secara otomatis.
+              </p>
+            </div>
+          )}
         </div>
       </Section>
 

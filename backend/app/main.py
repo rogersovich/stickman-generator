@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
-from . import config, db, jobs, settings, storage, tts, voices
+from . import config, d1, db, jobs, r2, settings, storage, tts, voices
 from .models import (
     CreateProjectIn,
     ImportMarkdownIn,
@@ -29,9 +29,17 @@ from .styles import build_prompt, load_styles
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    if config.has_d1():
+        try:
+            d1.init_db()
+        except Exception as e:
+            import logging
+            logging.getLogger("main").error(f"D1 init error: {e}")
     for p in storage.list_all():
         try:
             db.save_project_record(p)
+            if config.has_d1():
+                d1.save_project(p)
         except Exception:
             pass
     yield
@@ -70,9 +78,16 @@ def get_file(project_id: str, name: str):
         f = storage.project_dir(project_id) / name
     except ValueError:
         raise HTTPException(404)
-    if "/" in name or ".." in name or not f.is_file():
+    if "/" in name or ".." in name:
         raise HTTPException(404)
-    return FileResponse(f)
+    if f.is_file():
+        return FileResponse(f)
+    # If not on local disk (e.g. accessed on another device), download from R2
+    if config.has_r2():
+        r2_key = f"projects/{project_id}/{name}"
+        if r2.download_file(r2_key, f):
+            return FileResponse(f)
+    raise HTTPException(404)
 
 
 @app.get("/api/health")
@@ -464,6 +479,34 @@ def stop_project_audio(project_id: str):
     p = _get(project_id)
     tts.stop_voice_generation(project_id)
     return {"ok": True, "voice_status": "idle"}
+
+
+# ---------- Cloudflare D1 & R2 Storage Status & Backup ----------
+
+@app.get("/api/storage/status")
+def get_storage_status():
+    projects = storage.list_all()
+    total_projects = len(projects)
+    r2_stats = r2.get_storage_stats() if config.has_r2() else {}
+    threshold = config.BACKUP_PROJECT_THRESHOLD
+    needs_backup = total_projects >= threshold
+
+    rclone_cmd = (
+        f"rclone copy :s3,provider=Cloudflare,endpoint='{config.R2_ENDPOINT_URL}',"
+        f"access_key_id='{config.R2_ACCESS_KEY_ID}',"
+        f"secret_access_key='{config.R2_SECRET_ACCESS_KEY}':{config.R2_BUCKET_NAME} "
+        f"gdrive:StickmanGeneratorArchive --progress"
+    )
+
+    return {
+        "d1_connected": config.has_d1(),
+        "r2_connected": config.has_r2(),
+        "total_projects": total_projects,
+        "backup_threshold": threshold,
+        "needs_backup": needs_backup,
+        "r2_stats": r2_stats,
+        "rclone_backup_command": rclone_cmd,
+    }
 
 
 # ---------- jobs (used by the browser extension) ----------

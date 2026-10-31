@@ -4,7 +4,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, db
+from . import config, d1, db, r2
 from .models import Project, now_iso
 
 lock = threading.RLock()
@@ -30,44 +30,125 @@ def save(project: Project) -> None:
         d = project_dir(project.id)
         d.mkdir(parents=True, exist_ok=True)
         project.updated_at = now_iso()
+        project_file = d / "project.json"
         tmp = d / "project.json.tmp"
         tmp.write_text(project.model_dump_json(indent=2), encoding="utf-8")
-        tmp.replace(d / "project.json")
+        tmp.replace(project_file)
+
+        # 1. Sync to local SQLite
         try:
             db.save_project_record(project)
         except Exception:
             pass
 
+        # 2. Sync to Cloudflare D1
+        if config.has_d1():
+            try:
+                d1.save_project(project)
+            except Exception as e:
+                import logging
+                logging.getLogger("storage").error(f"Failed to sync project to D1: {e}")
+
+        # 3. Sync project metadata to Cloudflare R2
+        if config.has_r2():
+            try:
+                r2.upload_file(project_file, f"projects/{project.id}/project.json", "application/json")
+            except Exception:
+                pass
+
 
 def load(project_id: str) -> Project | None:
     with lock:
-        f = project_dir(project_id) / "project.json"
-        if not f.exists():
-            return None
-        return Project.model_validate_json(f.read_text(encoding="utf-8"))
+        d = project_dir(project_id)
+        f = d / "project.json"
+
+        # 1. Coba baca dari file lokal
+        if f.exists():
+            try:
+                return Project.model_validate_json(f.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        # 2. Jika tidak ada di lokal (misal baru buka di device lain), ambil dari Cloudflare D1
+        if config.has_d1():
+            try:
+                proj = d1.load_project(project_id)
+                if proj:
+                    # Simpan ke cache lokal
+                    d.mkdir(parents=True, exist_ok=True)
+                    f.write_text(proj.model_dump_json(indent=2), encoding="utf-8")
+                    return proj
+            except Exception:
+                pass
+
+        # 3. Fallback: coba unduh dari R2
+        if config.has_r2():
+            try:
+                if r2.download_file(f"projects/{project_id}/project.json", f):
+                    return Project.model_validate_json(f.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        return None
 
 
 def list_all() -> list[Project]:
     with lock:
+        # 1. Jika terhubung D1, gunakan D1 sebagai single source of truth lintas device
+        if config.has_d1():
+            try:
+                projects = d1.list_projects()
+                if projects:
+                    # Sync local directory cache
+                    for p in projects:
+                        d = project_dir(p.id)
+                        d.mkdir(parents=True, exist_ok=True)
+                        pf = d / "project.json"
+                        if not pf.exists():
+                            pf.write_text(p.model_dump_json(indent=2), encoding="utf-8")
+                    return projects
+            except Exception as e:
+                import logging
+                logging.getLogger("storage").error(f"Failed to list from D1: {e}")
+
+        # 2. Fallback ke folder lokal jika D1 belum dikonfigurasi / offline
         if not config.OUTPUT_DIR.exists():
             return []
-        projects = [
-            Project.model_validate_json(f.read_text(encoding="utf-8"))
-            for f in config.OUTPUT_DIR.glob("*/project.json")
-        ]
-    return sorted(projects, key=lambda p: p.created_at, reverse=True)
+        projects = []
+        for f in config.OUTPUT_DIR.glob("*/project.json"):
+            try:
+                projects.append(Project.model_validate_json(f.read_text(encoding="utf-8")))
+            except Exception:
+                pass
+        return sorted(projects, key=lambda p: p.created_at, reverse=True)
 
 
 def delete(project_id: str) -> None:
     with lock:
-        d = project_dir(project_id)
-        if not (d / "project.json").exists():
-            raise LookupError("project not found")
-        shutil.rmtree(d)
-        dl_dir = config.DOWNLOADS_DIR / "stickman-flow" / project_id
-        if dl_dir.exists():
-            shutil.rmtree(dl_dir, ignore_errors=True)
+        # 1. Hapus dari D1
+        if config.has_d1():
+            try:
+                d1.delete_project(project_id)
+            except Exception:
+                pass
+
+        # 2. Hapus aset media di Cloudflare R2
+        if config.has_r2():
+            try:
+                r2.delete_prefix(f"projects/{project_id}/")
+            except Exception:
+                pass
+
+        # 3. Hapus dari SQLite lokal
         try:
             db.delete_project_record(project_id)
         except Exception:
             pass
+
+        # 4. Hapus folder lokal
+        d = project_dir(project_id)
+        if d.exists():
+            shutil.rmtree(d, ignore_errors=True)
+        dl_dir = config.DOWNLOADS_DIR / "stickman-flow" / project_id
+        if dl_dir.exists():
+            shutil.rmtree(dl_dir, ignore_errors=True)
