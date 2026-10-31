@@ -3,6 +3,10 @@
 *.env
 !.env.example
 backend/.env
+*.conf
+rclone.conf
+data/rclone.conf
+.rclone/
 
 # Python
 __pycache__/

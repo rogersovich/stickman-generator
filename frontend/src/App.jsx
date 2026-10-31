@@ -137,7 +137,7 @@ export default function App() {
                 Jumlah proyek di Cloudflare R2 telah mencapai <b>{storage?.total_projects} proyek</b> (batas aman rekomendasi: {storage?.backup_threshold} proyek).
               </p>
               <p className="text-slate-400">
-                Karena proyek-proyek ini umumnya sudah selesai di-render dan diunggah ke YouTube, disarankan memindahkan arsipnya ke Google Drive via <b>rclone</b> agar kuota 10 GB gratis Cloudflare R2 selalu aman dan bersih.
+                Karena proyek-proyek ini umumnya sudah selesai di-render dan diunggah ke YouTube, disarankan memindahkan arsipnya ke Google Drive (khusus akun: <b className="text-amber-300 font-mono">{storage?.gdrive_email || "aseplandak02@gmail.com"}</b>) via <b>rclone</b> agar kuota 10 GB gratis Cloudflare R2 selalu aman dan bersih.
               </p>
 
               <div className="space-y-1.5 pt-1">

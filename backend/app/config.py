@@ -52,7 +52,11 @@ R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "stickman-genarator")
 R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL", "")
 
 BACKUP_PROJECT_THRESHOLD = int(os.getenv("BACKUP_PROJECT_THRESHOLD", "30"))
-GDRIVE_BACKUP_DESTINATION = os.getenv("GDRIVE_BACKUP_DESTINATION", "gdrive:StickmanGeneratorArchive")
+GDRIVE_EMAIL = os.getenv("GDRIVE_EMAIL", "aseplandak02@gmail.com")
+GDRIVE_REMOTE_NAME = os.getenv("GDRIVE_REMOTE_NAME", "gdrive_stickman")
+GDRIVE_FOLDER_NAME = os.getenv("GDRIVE_FOLDER_NAME", "StickmanGeneratorArchive")
+GDRIVE_BACKUP_DESTINATION = os.getenv("GDRIVE_BACKUP_DESTINATION", f"{GDRIVE_REMOTE_NAME}:{GDRIVE_FOLDER_NAME}")
+RCLONE_CONFIG_PATH = os.getenv("RCLONE_CONFIG_PATH", "data/rclone.conf")
 
 
 def has_d1() -> bool:

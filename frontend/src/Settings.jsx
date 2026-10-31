@@ -397,6 +397,28 @@ export default function Settings() {
             </div>
           )}
 
+          {/* Isolated Google Drive Account Info */}
+          <div className="rounded-lg border border-[#21242d] bg-[#0c0d12] p-3 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-200">
+                Akun Google Drive: <span className="text-amber-300 font-mono">{storageStatus?.gdrive_email || "aseplandak02@gmail.com"}</span>
+              </span>
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  storageStatus?.gdrive_configured
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                    : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                }`}
+              >
+                <span className={`size-1.5 rounded-full ${storageStatus?.gdrive_configured ? "bg-emerald-400" : "bg-amber-400"}`} />
+                {storageStatus?.gdrive_configured ? "Terhubung" : "Belum Login"}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Koneksi terisolasi di file lokal <code className="text-slate-300">{storageStatus?.rclone_config_path || "data/rclone.conf"}</code>, terpisah penuh dari environment luar atau akun Google Drive lain di komputer.
+            </p>
+          </div>
+
           {storageStatus?.rclone_backup_command && (
             <div className="space-y-1.5 pt-1">
               <div className="flex items-center justify-between">

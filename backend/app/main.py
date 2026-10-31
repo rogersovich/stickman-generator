@@ -491,13 +491,27 @@ def get_storage_status():
     threshold = config.BACKUP_PROJECT_THRESHOLD
     needs_backup = total_projects >= threshold
 
-    dest = config.GDRIVE_BACKUP_DESTINATION or "gdrive:StickmanGeneratorArchive"
+    dest = config.GDRIVE_BACKUP_DESTINATION or f"{config.GDRIVE_REMOTE_NAME}:{config.GDRIVE_FOLDER_NAME}"
+    cfg_arg = f' --config "{config.RCLONE_CONFIG_PATH}"'
     rclone_cmd = (
         f"rclone copy :s3,provider=Cloudflare,endpoint='{config.R2_ENDPOINT_URL}',"
         f"access_key_id='{config.R2_ACCESS_KEY_ID}',"
         f"secret_access_key='{config.R2_SECRET_ACCESS_KEY}':{config.R2_BUCKET_NAME} "
-        f"{dest} --progress"
+        f"{dest}{cfg_arg} --progress"
     )
+
+    rclone_conf_candidates = [
+        Path(config.RCLONE_CONFIG_PATH),
+        Path("..") / config.RCLONE_CONFIG_PATH,
+        Path(__file__).resolve().parent.parent.parent / config.RCLONE_CONFIG_PATH,
+    ]
+    gdrive_configured = False
+    for p in rclone_conf_candidates:
+        if p.exists():
+            text = p.read_text(encoding="utf-8", errors="ignore")
+            if f"[{config.GDRIVE_REMOTE_NAME}]" in text and "token" in text:
+                gdrive_configured = True
+                break
 
     return {
         "d1_connected": config.has_d1(),
@@ -505,7 +519,11 @@ def get_storage_status():
         "total_projects": total_projects,
         "backup_threshold": threshold,
         "needs_backup": needs_backup,
+        "gdrive_email": config.GDRIVE_EMAIL,
+        "gdrive_remote_name": config.GDRIVE_REMOTE_NAME,
         "gdrive_destination": dest,
+        "gdrive_configured": gdrive_configured,
+        "rclone_config_path": config.RCLONE_CONFIG_PATH,
         "r2_stats": r2_stats,
         "rclone_backup_command": rclone_cmd,
     }
