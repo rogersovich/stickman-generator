@@ -7,6 +7,7 @@ so a backend restart puts every generating scene back in the queue (reset_on_sta
 import hashlib
 import io
 import random
+import re
 import time
 import wave
 from typing import Literal
@@ -52,6 +53,40 @@ def _load(project_id: str) -> Project:
     return p
 
 
+END_PUNCT_REGEX = re.compile(r"[\.\!\?\u2026]+[\"\'\u201d\u2019]?\s*$")
+
+
+def get_sentence_groups(scenes: list[Scene], max_scenes: int = 4, max_words: int = 35) -> list[list[int]]:
+    groups: list[list[int]] = []
+    current_group: list[int] = []
+    current_words = 0
+
+    for i, s in enumerate(scenes):
+        narration = (s.narration or "").strip()
+        words = len(narration.split())
+        current_group.append(i)
+        current_words += words
+
+        ends_sentence = bool(END_PUNCT_REGEX.search(narration))
+        reached_limit = len(current_group) >= max_scenes or current_words >= max_words
+
+        if ends_sentence or reached_limit or i == len(scenes) - 1:
+            groups.append(current_group)
+            current_group = []
+            current_words = 0
+
+    return groups
+
+
+def get_scene_group_map(scenes: list[Scene]) -> dict[int, list[int]]:
+    groups = get_sentence_groups(scenes)
+    mapping: dict[int, list[int]] = {}
+    for g in groups:
+        for idx in g:
+            mapping[idx] = g
+    return mapping
+
+
 def enqueue(project_id: str, mode: Literal["missing", "all"], indices: list[int] | None = None) -> Project:
     with storage.lock:
         p = _load(project_id)
@@ -62,7 +97,17 @@ def enqueue(project_id: str, mode: Literal["missing", "all"], indices: list[int]
             raise ValueError("Pilih suara dulu")
         if voices.get(voice_id) is None:
             raise ValueError("Suara tidak ditemukan")
-        targets = range(len(p.scenes)) if indices is None else [i for i in indices if 0 <= i < len(p.scenes)]
+
+        group_map = get_scene_group_map(p.scenes)
+        if indices is None:
+            targets = list(range(len(p.scenes)))
+        else:
+            expanded = set()
+            for i in indices:
+                if 0 <= i < len(p.scenes):
+                    expanded.update(group_map.get(i, [i]))
+            targets = sorted(expanded)
+
         for i in targets:
             s = p.scenes[i]
             if s.audio_status == "generating":
@@ -72,6 +117,15 @@ def enqueue(project_id: str, mode: Literal["missing", "all"], indices: list[int]
                 continue
             if mode == "all" or s.audio_status in ("pending", "failed") or is_stale(p, s):
                 s.audio_status, s.audio_error = "queued", None
+
+        # Ensure all members of affected sentence groups are queued together
+        queued_indices = {i for i, s in enumerate(p.scenes) if s.audio_status == "queued"}
+        for q_idx in list(queued_indices):
+            for m in group_map.get(q_idx, [q_idx]):
+                m_scene = p.scenes[m]
+                if m_scene.audio_status != "generating" and m_scene.narration.strip():
+                    m_scene.audio_status, m_scene.audio_error = "queued", None
+
         storage.save(p)
         return p
 
@@ -135,23 +189,36 @@ def claim(name: str, models: list[str], is_local: bool) -> dict | None:
                         s.audio_status, s.audio_error = "failed", "Suara tidak ditemukan"
                 storage.save(p)
                 continue
-            i = next(i for i, s in enumerate(p.scenes) if s.audio_status == "queued")
-            s = p.scenes[i]
+            first_q = next(i for i, s in enumerate(p.scenes) if s.audio_status == "queued")
+            group_map = get_scene_group_map(p.scenes)
+            group = group_map.get(first_q, [first_q])
+
             seed = random.randint(1, 2**31 - 1)
-            s.audio_status, s.audio_error, s.audio_seed = "generating", None, seed
-            s.audio_started_at, s.audio_worker = now_iso(), name
+            for idx in group:
+                s_member = p.scenes[idx]
+                s_member.audio_status, s_member.audio_error, s_member.audio_seed = "generating", None, seed
+                s_member.audio_started_at, s_member.audio_worker = now_iso(), name
+                _leases[(p.id, idx)] = (name, time.time() + config.TTS_LEASE_SECONDS)
             storage.save(p)
-            _leases[(p.id, i)] = (name, time.time() + config.TTS_LEASE_SECONDS)
+
             params = getattr(settings.load(), model).model_dump()
             voice_speed = voices.get_voice_speed(voice.id)
             params["speed"] = voice_speed
             v_cfg = voices.VOICE_REGISTRY.get(voice.id)
             lora_path = getattr(v_cfg, "lora_path", None) if v_cfg else None
             lora_scale = getattr(v_cfg, "lora_scale", None) if v_cfg else None
+
+            scene_texts = [p.scenes[idx].narration.strip() for idx in group]
+            scene_keys = [audio_key(p.scenes[idx].narration, voice_id, model, voice_speed) for idx in group]
+            combined_text = " ".join(t for t in scene_texts if t)
+
             return {
                 "project_id": p.id,
-                "scene_index": i,
-                "text": s.narration.strip(),
+                "scene_indices": group,
+                "scene_index": group[0],
+                "scene_texts": scene_texts,
+                "scene_keys": scene_keys,
+                "text": combined_text,
                 "lang": lang_code(p.language),
                 "voice_id": voice.id,
                 "voice_version": int(voices.ref_path(voice.id).stat().st_mtime),
@@ -160,7 +227,7 @@ def claim(name: str, models: list[str], is_local: bool) -> dict | None:
                 "params": params,
                 "speed": voice_speed,
                 "seed": seed,
-                "key": audio_key(s.narration, voice_id, model, voice_speed),
+                "key": audio_key(combined_text, voice_id, model, voice_speed),
                 "lora_path": lora_path,
                 "lora_scale": lora_scale,
             }

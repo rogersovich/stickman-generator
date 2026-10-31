@@ -28,7 +28,15 @@ def reference_wav(client: Client, job: dict):
 
 
 def run_job(client: Client, job: dict, device: str) -> None:
-    label = f"[{job['project_id'][:24]} #{job['scene_index'] + 1}]"
+    scene_indices = job.get("scene_indices") or [job["scene_index"]]
+    scene_texts = job.get("scene_texts") or [job["text"]]
+    scene_keys = job.get("scene_keys") or [job["key"]]
+
+    if len(scene_indices) > 1:
+        label = f"[{job['project_id'][:24]} #{scene_indices[0] + 1}-#{scene_indices[-1] + 1} ({len(scene_indices)} scenes)]"
+    else:
+        label = f"[{job['project_id'][:24]} #{scene_indices[0] + 1}]"
+
     t0 = time.perf_counter()
     engine = get_engine(job["model"])
     engine.set_reference(reference_wav(client, job), job.get("voice_transcript") or "")
@@ -55,8 +63,17 @@ def run_job(client: Client, job: dict, device: str) -> None:
         raise ValueError("Narasi kosong")
     waves = [engine.generate(p, job["seed"], job["params"], job["lang"]) for p in pieces]
     wave = trim_silence(concat(waves, engine.sr), engine.sr)
-    client.put_result(job["project_id"], job["scene_index"], job["key"], to_wav_bytes(wave, engine.sr))
-    log(f"{label} {job['model']} {len(wave) / engine.sr:.1f}s audio in {time.perf_counter() - t0:.1f}s ({device})")
+
+    if len(scene_indices) > 1:
+        from splitter import align_and_slice
+        slices = align_and_slice(wave, engine.sr, scene_texts, job.get("lang", "id"))
+        for s_idx, s_key, s_wave in zip(scene_indices, scene_keys, slices):
+            trimmed_slice = trim_silence(s_wave, engine.sr)
+            client.put_result(job["project_id"], s_idx, s_key, to_wav_bytes(trimmed_slice, engine.sr))
+        log(f"{label} {job['model']} Group of {len(scene_indices)} scenes ({len(wave) / engine.sr:.1f}s total) in {time.perf_counter() - t0:.1f}s ({device})")
+    else:
+        client.put_result(job["project_id"], scene_indices[0], scene_keys[0], to_wav_bytes(wave, engine.sr))
+        log(f"{label} {job['model']} {len(wave) / engine.sr:.1f}s audio in {time.perf_counter() - t0:.1f}s ({device})")
 
 
 def heartbeat_loop(client: Client, models: list[str], device: str, stop: threading.Event) -> None:
@@ -104,12 +121,14 @@ def main() -> None:
                 log(f"scene {job['scene_index'] + 1} was reassigned; result dropped")
             except Offline as e:
                 log(f"backend offline while uploading ({e}); the scene will be requeued")
-            except Exception as e:  # one bad scene must not stop the worker
-                log(f"scene {job['scene_index'] + 1} failed: {e}")
-                try:
-                    client.fail(job["project_id"], job["scene_index"], str(e))
-                except Exception:
-                    pass
+            except Exception as e:  # one bad scene or group must not stop the worker
+                scene_indices = job.get("scene_indices") or [job.get("scene_index", 0)]
+                log(f"scenes {[i + 1 for i in scene_indices]} failed: {e}")
+                for idx in scene_indices:
+                    try:
+                        client.fail(job["project_id"], idx, str(e))
+                    except Exception:
+                        pass
     except KeyboardInterrupt:
         log("stopping")
     finally:

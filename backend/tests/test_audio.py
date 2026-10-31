@@ -239,3 +239,47 @@ def test_pause_unqueues(proj):
     audio.enqueue(proj.id, "missing")
     p = audio.pause(proj.id)
     assert [s.audio_status for s in p.scenes] == ["pending"] * 3
+
+
+def test_sentence_grouping_logic():
+    scenes = [
+        Scene(narration="Sudah enam tahun kamu mengajar di kelas yang sama,"),
+        Scene(narration="Dengan papan tulis yang retak di sudutnya"),
+        Scene(narration="Dan jendela yang tidak pernah benar-benar tertutup rapat."),
+        Scene(narration="Kalau hujan turun,"),
+        Scene(narration="Air menetes dari satu sudut atap."),
+    ]
+    groups = audio.get_sentence_groups(scenes)
+    assert groups == [[0, 1, 2], [3, 4]]
+
+
+def test_enqueue_and_claim_sentence_group(proj, tmp_path, monkeypatch):
+    # Setup project with multi-scene sentence
+    p = storage.load(proj.id)
+    p.scenes = [
+        Scene(narration="Sudah enam tahun mengajar,"),
+        Scene(narration="dengan papan tulis retak"),
+        Scene(narration="dan jendela berdebu."),
+        Scene(narration="Hari ini bel berbunyi tepat waktu."),
+    ]
+    storage.save(p)
+
+    # Enqueue only scene 1 -> should expand to [0, 1, 2]
+    audio.enqueue(p.id, "all", indices=[1])
+    reloaded = storage.load(p.id)
+    assert [s.audio_status for s in reloaded.scenes] == ["queued", "queued", "queued", "pending"]
+
+    # Claim should take the entire group [0, 1, 2]
+    job = audio.claim("pc", ["omnivoice"], False)
+    assert job is not None
+    assert job["scene_indices"] == [0, 1, 2]
+    assert job["scene_texts"] == [
+        "Sudah enam tahun mengajar,",
+        "dengan papan tulis retak",
+        "dan jendela berdebu."
+    ]
+    assert job["text"] == "Sudah enam tahun mengajar, dengan papan tulis retak dan jendela berdebu."
+
+    # All 3 scenes should be generating
+    reloaded = storage.load(p.id)
+    assert [s.audio_status for s in reloaded.scenes] == ["generating", "generating", "generating", "pending"]

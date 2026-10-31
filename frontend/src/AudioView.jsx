@@ -638,21 +638,52 @@ export default function AudioView({ project, setProject }) {
         {scenes.map((s, i) => {
           const [label, tone] = STATUS[s.audio_stale ? "stale" : s.audio_status] ?? STATUS.pending;
           const isCurrentPlayAll = currentPlayingIndex === i && playingAll;
+          const isGrouped = (s.sentence_group_size ?? 1) > 1;
+          const isGroupFirst = s.sentence_group_first ?? true;
+          const isGroupLast = s.sentence_group_last ?? true;
+          const groupScenes = s.sentence_group_scenes || [i];
 
           return (
-            <li
-              key={i}
-              id={`audio-scene-${i}`}
-              className={`card flex scroll-mt-72 flex-col gap-3 p-3 sm:flex-row sm:items-center transition-all duration-200 ${
-                isCurrentPlayAll
-                  ? "ring-2 ring-amber-400 border-amber-500/70 bg-amber-500/10 shadow-lg shadow-amber-500/10"
-                  : failedNav.flash === i
-                  ? "ring-2 ring-red-400 ring-offset-2 ring-offset-[#0f1117]"
-                  : s.audio_status === "failed"
-                  ? "border-red-500/40"
-                  : ""
-              }`}
-            >
+            <div key={i} className={isGrouped && isGroupFirst ? "mt-3 first:mt-0" : ""}>
+              {isGrouped && isGroupFirst && (
+                <div className="flex items-center justify-between px-3.5 py-1.5 rounded-t-lg bg-gradient-to-r from-amber-500/15 via-[#181c26] to-transparent border-t border-l border-r border-amber-500/30 text-[11px] font-mono text-amber-300/90 shadow-sm">
+                  <div className="flex items-center gap-2 font-medium">
+                    <span className="size-2 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
+                    <span className="font-bold text-amber-200">Grup Kalimat #{s.sentence_group + 1}</span>
+                    <span className="text-slate-400 text-[10px]">
+                      (Scene #{groupScenes[0] + 1} – #{groupScenes[groupScenes.length - 1] + 1} · {s.sentence_group_size} scene digabung saat TTS)
+                    </span>
+                  </div>
+                  <button
+                    className="btn-ghost px-2 py-0.5 text-[10px] text-amber-300 hover:text-white hover:bg-amber-500/20 flex items-center gap-1 border border-amber-500/30 rounded transition"
+                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: groupScenes }))}
+                    title="Generate ulang seluruh kalimat ini bersamaan"
+                  >
+                    <RotateCcw size={10} />
+                    <span>Generate Grup</span>
+                  </button>
+                </div>
+              )}
+              <li
+                id={`audio-scene-${i}`}
+                className={`card flex scroll-mt-72 flex-col gap-3 p-3 sm:flex-row sm:items-center transition-all duration-200 ${
+                  isGrouped
+                    ? `border-l-4 border-l-amber-500/80 bg-[#141720]/80 ${
+                        isGroupFirst ? "rounded-t-none border-t-0" : ""
+                      } ${!isGroupFirst && !isGroupLast ? "rounded-none border-t border-b border-[#292e3b]/30 -mt-2" : ""} ${
+                        isGroupLast ? "rounded-t-none -mt-2" : ""
+                      }`
+                    : ""
+                } ${
+                  isCurrentPlayAll
+                    ? "ring-2 ring-amber-400 border-amber-500/70 bg-amber-500/10 shadow-lg shadow-amber-500/10"
+                    : failedNav.flash === i
+                    ? "ring-2 ring-red-400 ring-offset-2 ring-offset-[#0f1117]"
+                    : s.audio_status === "failed"
+                    ? "border-red-500/40"
+                    : ""
+                }`}
+              >
               <div className="flex items-start gap-3 sm:w-[55%]">
                 <div className={`${project.format === "9:16" ? "aspect-[9/16] w-12" : "aspect-video w-24"} shrink-0 overflow-hidden rounded-md bg-[#12141a]`}>
                   {s.image_file && <img src={api.fileUrl(id, s.image_file, project.updated_at)} alt="" className="h-full w-full object-cover" loading="lazy" />}
@@ -660,6 +691,11 @@ export default function AudioView({ project, setProject }) {
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-bold text-slate-400">#{i + 1}</span>
+                    {isGrouped && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-amber-500/10 text-amber-300/80 border border-amber-500/20" title={`Bagian dari grup kalimat #${s.sentence_group + 1}`}>
+                        Grup
+                      </span>
+                    )}
                     {s.audio_file && s.audio_status === "done" && (
                       <button
                         className={`px-1.5 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 transition ${
@@ -733,33 +769,34 @@ export default function AudioView({ project, setProject }) {
                 ) : s.audio_file && s.audio_status === "done" && !s.audio_stale ? (
                   <button
                     className="btn-ghost px-2.5 py-1 text-[11px] text-slate-300 hover:text-white flex items-center gap-1.5 transition"
-                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: [i] }))}
-                    title="Generate ulang audio untuk scene ini"
+                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: isGrouped ? groupScenes : [i] }))}
+                    title={isGrouped ? `Generate ulang seluruh grup kalimat (${groupScenes.length} scene)` : "Generate ulang audio untuk scene ini"}
                   >
                     <RotateCcw size={12} className="text-slate-400" />
-                    <span>Generate Ulang</span>
+                    <span>{isGrouped ? "Generate Grup" : "Generate Ulang"}</span>
                   </button>
                 ) : s.audio_status === "failed" ? (
                   <button
                     className="rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-300 hover:bg-red-500/20 hover:border-red-500/60 flex items-center gap-1.5 transition"
-                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: [i] }))}
+                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: isGrouped ? groupScenes : [i] }))}
                     title="Coba generate ulang audio yang gagal"
                   >
                     <RotateCcw size={12} />
-                    <span>Coba Lagi</span>
+                    <span>{isGrouped ? "Coba Lagi Grup" : "Coba Lagi"}</span>
                   </button>
                 ) : (
                   <button
                     className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/60 flex items-center gap-1.5 transition shadow-sm"
-                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: [i] }))}
-                    title="Generate audio untuk scene ini"
+                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: isGrouped ? groupScenes : [i] }))}
+                    title={isGrouped ? `Generate grup kalimat (${groupScenes.length} scene)` : "Generate audio untuk scene ini"}
                   >
                     <AudioLines size={12} className="text-amber-400" />
-                    <span>Generate Audio</span>
+                    <span>{isGrouped ? "Generate Grup" : "Generate Audio"}</span>
                   </button>
                 )}
               </div>
             </li>
+            </div>
           );
         })}
       </ul>
