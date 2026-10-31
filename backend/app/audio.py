@@ -140,6 +140,9 @@ def claim(name: str, models: list[str], is_local: bool) -> dict | None:
             storage.save(p)
             _leases[(p.id, i)] = (name, time.time() + config.TTS_LEASE_SECONDS)
             params = getattr(settings.load(), model).model_dump()
+            v_cfg = voices.VOICE_REGISTRY.get(voice.id)
+            lora_path = getattr(v_cfg, "lora_path", None) if v_cfg else None
+            lora_scale = getattr(v_cfg, "lora_scale", None) if v_cfg else None
             return {
                 "project_id": p.id,
                 "scene_index": i,
@@ -152,6 +155,8 @@ def claim(name: str, models: list[str], is_local: bool) -> dict | None:
                 "params": params,
                 "seed": seed,
                 "key": audio_key(s.narration, voice_id, model),
+                "lora_path": lora_path,
+                "lora_scale": lora_scale,
             }
         return None
 
@@ -179,7 +184,14 @@ def save_result(project_id: str, index: int, name: str, key: str, data: bytes) -
         d = storage.project_dir(project_id) / "audio"
         d.mkdir(parents=True, exist_ok=True)
         name_ = f"scene_{index + 1:03d}.wav"
-        (d / name_).write_bytes(data)
+        dest_file = d / name_
+        dest_file.write_bytes(data)
+        if config.has_r2():
+            try:
+                from . import r2
+                r2.upload_file(dest_file, f"projects/{project_id}/audio/{name_}", "audio/wav")
+            except Exception:
+                pass
         s = p.scenes[index]
         s.audio_status, s.audio_file, s.audio_duration = "done", f"audio/{name_}", duration
         s.audio_key, s.audio_error = key, None

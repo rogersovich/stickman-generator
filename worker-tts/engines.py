@@ -150,6 +150,8 @@ class VoxCPM2Engine:
         self.model = None
         self.is_optimized = False
         self._ref_wav = None
+        self._current_lora = None
+        self._current_lora_scale = 1.0
 
     def load(self) -> None:
         # Load safetensors on the CPU first: loading straight to the GPU duplicates ~9 GB in VRAM (OOM / "invalid
@@ -193,6 +195,28 @@ class VoxCPM2Engine:
     def set_reference(self, ref_wav: Path, transcript: str) -> None:
         self._ref_wav = str(ref_wav)  # VoxCPM2 clones from audio only; the transcript is not used
 
+    def set_lora_scale(self, scale: float = 1.0) -> None:
+        scale_f = float(scale)
+        self._current_lora_scale = scale_f
+        if hasattr(self.model, "tts_model") and hasattr(self.model.tts_model, "_iter_lora_modules"):
+            for m in self.model.tts_model._iter_lora_modules():
+                if hasattr(m, "_base_scaling") and hasattr(m, "scaling"):
+                    m.scaling.fill_(m._base_scaling * scale_f)
+
+    def set_lora(self, lora_path: str | None, scale: float = 0.7) -> None:
+        if not lora_path or not Path(lora_path).exists():
+            return
+        if getattr(self, "_current_lora", None) == str(lora_path):
+            self.set_lora_scale(scale)
+            return
+        try:
+            self.model.tts_model.load_lora_weights(str(lora_path))
+            self._current_lora = str(lora_path)
+            self.set_lora_scale(scale)
+            print(f"[voxcpm2] LoRA dimuat dari {lora_path} (scale: {scale:.2f}x)", flush=True)
+        except Exception as e:
+            print(f"[voxcpm2] Gagal memuat LoRA '{lora_path}': {e}", flush=True)
+
     def generate(self, text: str, seed: int, params: dict, lang: str) -> np.ndarray:
         _seed(self.torch, seed)
         with _quiet(), self.torch.inference_mode():
@@ -213,7 +237,7 @@ class VoxCPM2Engine:
         return arr
 
     def unload(self) -> None:
-        self.model = self._ref_wav = None
+        self.model = self._ref_wav = self._current_lora = None
         free_memory(self.device)  # safe now: the compiled graphs went away with the model
 
 

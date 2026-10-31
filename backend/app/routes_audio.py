@@ -143,6 +143,14 @@ def audio_file(project_id: str, name: str):
     except ValueError:
         raise HTTPException(404)
     if not f.is_file():
+        if config.has_r2():
+            try:
+                from . import r2
+                f.parent.mkdir(parents=True, exist_ok=True)
+                if r2.download_file(f"projects/{project_id}/audio/{name}", f):
+                    return FileResponse(f, media_type="audio/wav")
+            except Exception:
+                pass
         raise HTTPException(404)
     return FileResponse(f, media_type="audio/wav")
 

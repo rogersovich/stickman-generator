@@ -45,6 +45,12 @@ $jobs += Start-Job -ScriptBlock $frontendScript
 
 # TTS Worker if venv exists
 $pythonExe = "$PSScriptRoot\worker-tts\.venv-ml\Scripts\python.exe"
+if (-not (Test-Path $pythonExe)) {
+    $altPy = "D:\Coding\Python\manhwa-recap-studio\.venv-ml\Scripts\python.exe"
+    if (Test-Path $altPy) {
+        $pythonExe = $altPy
+    }
+}
 if ($startTts -ne "0" -and (Test-Path $pythonExe)) {
     $ttsScript = {
         param($py)
