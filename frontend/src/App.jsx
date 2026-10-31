@@ -157,11 +157,12 @@ export default function App() {
               </div>
 
               <div className="rounded-lg border border-[#292e3b] bg-[#12141a] p-3 text-[11px] text-slate-400 space-y-1">
-                <p><b>Langkah Selanjutnya:</b></p>
-                <ol className="list-decimal pl-4 space-y-0.5">
-                  <li>Buka terminal, jalankan perintah rclone di atas untuk menyalin ke Google Drive.</li>
-                  <li>Setelah selesai ter-backup, kamu dapat menghapus proyek lama yang sudah tayang di YouTube agar R2 kembali lega.</li>
-                </ol>
+                <p><b>Cara Jalankan:</b></p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><b>Windows:</b> Cukup klik 2x file <code className="text-amber-300">backup.bat</code> di folder utama proyek!</li>
+                  <li><b>Mac:</b> Buka Terminal di folder proyek lalu jalankan <code className="text-amber-300">./backup.sh</code>.</li>
+                  <li>Atau salin perintah baris rclone di atas langsung ke terminal kamu.</li>
+                </ul>
               </div>
             </div>
 

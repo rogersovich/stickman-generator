@@ -418,7 +418,7 @@ export default function Settings() {
                 {storageStatus.rclone_backup_command}
               </pre>
               <p className="text-[11px] text-slate-400">
-                Jalankan perintah ini di Terminal Mac atau PowerShell Windows untuk menyalin seluruh aset R2 ke Google Drive kamu secara otomatis.
+                Jalankan perintah ini di Terminal, atau cukup klik 2x <code className="text-amber-300">backup.bat</code> (Windows) / <code className="text-amber-300">./backup.sh</code> (Mac) di folder aplikasi untuk menu interaktif otomatis.
               </p>
             </div>
           )}

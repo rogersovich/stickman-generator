@@ -491,11 +491,12 @@ def get_storage_status():
     threshold = config.BACKUP_PROJECT_THRESHOLD
     needs_backup = total_projects >= threshold
 
+    dest = config.GDRIVE_BACKUP_DESTINATION or "gdrive:StickmanGeneratorArchive"
     rclone_cmd = (
         f"rclone copy :s3,provider=Cloudflare,endpoint='{config.R2_ENDPOINT_URL}',"
         f"access_key_id='{config.R2_ACCESS_KEY_ID}',"
         f"secret_access_key='{config.R2_SECRET_ACCESS_KEY}':{config.R2_BUCKET_NAME} "
-        f"gdrive:StickmanGeneratorArchive --progress"
+        f"{dest} --progress"
     )
 
     return {
@@ -504,6 +505,7 @@ def get_storage_status():
         "total_projects": total_projects,
         "backup_threshold": threshold,
         "needs_backup": needs_backup,
+        "gdrive_destination": dest,
         "r2_stats": r2_stats,
         "rclone_backup_command": rclone_cmd,
     }

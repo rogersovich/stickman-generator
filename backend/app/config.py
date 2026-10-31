@@ -52,6 +52,7 @@ R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "stickman-genarator")
 R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL", "")
 
 BACKUP_PROJECT_THRESHOLD = int(os.getenv("BACKUP_PROJECT_THRESHOLD", "30"))
+GDRIVE_BACKUP_DESTINATION = os.getenv("GDRIVE_BACKUP_DESTINATION", "gdrive:StickmanGeneratorArchive")
 
 
 def has_d1() -> bool:
