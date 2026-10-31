@@ -16,3 +16,4 @@ def test_storage_status_endpoint():
     assert "needs_backup" in data
     assert "rclone_backup_command" in data
     assert "rclone" in data["rclone_backup_command"]
+
