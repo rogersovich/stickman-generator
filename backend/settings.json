@@ -37,7 +37,7 @@
   "resolution": "1K",
   "download_mode": "batch_end",
   "notifications": true,
-  "image_timeout_sec": 240.0,
+  "image_timeout_sec": 60.0,
   "tts_voice_id": "suara-1",
   "tts_model": "voxcpm2",
   "omnivoice": {

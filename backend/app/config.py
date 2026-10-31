@@ -40,7 +40,7 @@ DELAY_BETWEEN_IMAGES_MAX = float(os.getenv("DELAY_BETWEEN_IMAGES_MAX", "60"))
 # re-downloading an existing image needs no generation, so it can go faster
 REDOWNLOAD_DELAY_MIN = float(os.getenv("REDOWNLOAD_DELAY_MIN", "3"))
 REDOWNLOAD_DELAY_MAX = float(os.getenv("REDOWNLOAD_DELAY_MAX", "8"))
-JOB_TIMEOUT_SECONDS = float(os.getenv("JOB_TIMEOUT_SECONDS", "300"))
+JOB_TIMEOUT_SECONDS = float(os.getenv("JOB_TIMEOUT_SECONDS", "60"))
 
 # Cloudflare D1 & R2
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
