@@ -373,10 +373,11 @@ export default function AudioView({ project, setProject }) {
   };
 
   return (
-    <div className="space-y-5 relative">
-      {/* SECTION AUDIO NARASI (Sticky saat di-scroll) */}
-      <div className="panel space-y-4 p-5 sm:p-6 sticky top-3 z-30 bg-[#161920]/95 backdrop-blur-md shadow-2xl border border-[#292e3b] transition-all">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="relative">
+      {/* SECTION AUDIO NARASI (Sticky container at top: 0 with solid canvas background to mask scrolling scenes) */}
+      <div className="sticky top-0 z-30 bg-[#0e1015] pt-2 pb-3 -mx-2 px-2">
+        <div className="panel space-y-4 p-5 sm:p-6 bg-[#161920] shadow-2xl border border-[#292e3b]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
               <span>Audio Narasi</span>
@@ -564,10 +565,11 @@ export default function AudioView({ project, setProject }) {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* DAFTAR SCENE */}
-      <ul className="space-y-2">
+      <ul className="space-y-2 mt-2">
         {scenes.map((s, i) => {
           const [label, tone] = STATUS[s.audio_stale ? "stale" : s.audio_status] ?? STATUS.pending;
           const isCurrentPlayAll = currentPlayingIndex === i && playingAll;
