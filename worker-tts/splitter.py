@@ -36,6 +36,12 @@ def clean_token(w: str) -> str:
     return DIGIT_MAP.get(w, w)
 
 
+def normalize_chars(text: str) -> str:
+    tokens = re.findall(r"[\w]+", text.lower())
+    expanded = [DIGIT_MAP.get(t, t) for t in tokens if t]
+    return "".join(re.sub(r"[^\w]", "", t) for t in expanded)
+
+
 def tokenize(text: str) -> list[str]:
     tokens = re.findall(r"[\w]+", text.lower())
     return [DIGIT_MAP.get(t, t) for t in tokens if t]
@@ -151,63 +157,80 @@ def align_and_slice(audio: np.ndarray, sr: int, scene_texts: list[str], lang: st
             print("[splitter] Whisper did not detect words, using fallback slice", flush=True)
             return fallback_proportional_slice(audio, sr, scene_texts)
 
-        # Build target tokens with scene indices
-        target_tokens = []
-        for s_idx, text in enumerate(scene_texts):
-            tokens = tokenize(text)
-            for t in tokens:
-                target_tokens.append((t, s_idx))
+        # Build cumulative clean character streams for target scenes and whisper words
+        scene_char_ends = []
+        target_clean = ""
+        for t in scene_texts:
+            c = normalize_chars(t)
+            target_clean += c
+            scene_char_ends.append(len(target_clean))
 
-        if not target_tokens:
+        if not target_clean:
             return fallback_proportional_slice(audio, sr, scene_texts)
 
-        transcribed_tokens = [w["word"] for w in whisper_words]
+        whisper_clean = ""
+        whisper_spans = []
+        for w in whisper_words:
+            c = normalize_chars(w["word"])
+            st = len(whisper_clean)
+            whisper_clean += c
+            en = len(whisper_clean)
+            whisper_spans.append((st, en, w))
 
-        # Use SequenceMatcher to find alignment
-        matcher = difflib.SequenceMatcher(None, [t[0] for t in target_tokens], transcribed_tokens)
+        if not whisper_clean:
+            return fallback_proportional_slice(audio, sr, scene_texts)
+
+        # Match character streams using SequenceMatcher (immune to word-splitting/compounding variations)
+        matcher = difflib.SequenceMatcher(None, target_clean, whisper_clean)
         opcodes = matcher.get_opcodes()
 
-        target_to_whisper = {}
-        for tag, i1, i2, j1, j2 in opcodes:
-            if tag == "equal":
-                for idx in range(i2 - i1):
-                    target_to_whisper[i1 + idx] = j1 + idx
-            elif tag == "replace":
-                for idx in range(min(i2 - i1, j2 - j1)):
-                    target_to_whisper[i1 + idx] = j1 + idx
+        def t2w(t_idx: int) -> int:
+            for tag, i1, i2, j1, j2 in opcodes:
+                if i1 <= t_idx <= i2:
+                    if tag == "equal":
+                        return j1 + (t_idx - i1)
+                    elif tag == "replace":
+                        ratio = (t_idx - i1) / max(1, i2 - i1)
+                        return int(j1 + ratio * (j2 - j1))
+                    elif tag == "delete":
+                        return j1
+                    elif tag == "insert":
+                        return j2
+            return len(whisper_clean)
 
         # Determine cut points between scenes
         cut_points = [0.0]
         prev_cut = 0.0
 
         for s_idx in range(len(scene_texts) - 1):
-            s_token_indices = [i for i, (_, s) in enumerate(target_tokens) if s == s_idx]
-            next_s_token_indices = [i for i, (_, s) in enumerate(target_tokens) if s == s_idx + 1]
+            target_boundary = scene_char_ends[s_idx]
+            whisper_boundary = t2w(target_boundary)
 
-            # Find last matched whisper word for current scene
-            last_w_idx = None
-            for ti in reversed(s_token_indices):
-                if ti in target_to_whisper:
-                    last_w_idx = target_to_whisper[ti]
-                    break
+            prev_w = None
+            next_w = None
+            spanning_w = None
 
-            # Find first matched whisper word for next scene
-            first_w_idx = None
-            for ti in next_s_token_indices:
-                if ti in target_to_whisper:
-                    first_w_idx = target_to_whisper[ti]
-                    break
+            for st, en, w in whisper_spans:
+                if en <= whisper_boundary:
+                    prev_w = w
+                if st >= whisper_boundary and next_w is None:
+                    next_w = w
+                if st < whisper_boundary < en:
+                    spanning_w = w
 
-            if last_w_idx is not None and first_w_idx is not None:
-                end_t = whisper_words[last_w_idx]["end"]
-                start_t = whisper_words[first_w_idx]["start"]
+            if prev_w and next_w:
+                end_t = prev_w["end"]
+                start_t = next_w["start"]
                 cut = find_best_cut_point(audio, sr, end_t, start_t)
-            elif last_w_idx is not None:
-                cut = min(total_dur - 0.1, whisper_words[last_w_idx]["end"] + 0.05)
-            elif first_w_idx is not None:
-                cut = max(0.1, whisper_words[first_w_idx]["start"] - 0.05)
+            elif spanning_w:
+                st, en, w = spanning_w
+                ratio = (whisper_boundary - st) / max(1, en - st)
+                cut = w["start"] + ratio * (w["end"] - w["start"])
+            elif prev_w:
+                cut = min(total_dur - 0.1, prev_w["end"] + 0.05)
+            elif next_w:
+                cut = max(0.1, next_w["start"] - 0.05)
             else:
-                # Proportional estimate between previous cut and end
                 remaining_scenes = len(scene_texts) - s_idx
                 cut = prev_cut + (total_dur - prev_cut) / remaining_scenes
 

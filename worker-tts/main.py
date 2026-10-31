@@ -72,8 +72,10 @@ def run_job(client: Client, job: dict, device: str) -> None:
             from splitter import align_and_slice
             slices = align_and_slice(wave, engine.sr, scene_texts, job.get("lang", "id"))
             for s_idx, s_key, s_wave in zip(scene_indices, scene_keys, slices):
-                trimmed_slice = trim_silence(s_wave, engine.sr)
-                client.put_result(job["project_id"], s_idx, s_key, to_wav_bytes(trimmed_slice, engine.sr))
+                # Slices already have micro-fades from align_and_slice; do not trim_silence to avoid clipping phonemes
+                client.put_result(job["project_id"], s_idx, s_key, to_wav_bytes(s_wave, engine.sr))
+            # Also upload the full uncut master audio for the whole sentence group
+            client.put_group_result(job["project_id"], scene_indices[0], job["key"], to_wav_bytes(wave, engine.sr))
             log(f"{label} {job['model']} Group of {len(scene_indices)} scenes ({len(wave) / engine.sr:.1f}s total) in {time.perf_counter() - t0:.1f}s ({device})")
         else:
             client.put_result(job["project_id"], scene_indices[0], scene_keys[0], to_wav_bytes(wave, engine.sr))

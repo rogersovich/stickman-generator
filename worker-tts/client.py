@@ -56,5 +56,9 @@ class Client:
         query = urllib.parse.urlencode({"key": key})
         self._request("PUT", f"/jobs/{project_id}/{index}/result?{query}", wav, "audio/wav")
 
+    def put_group_result(self, project_id: str, first_index: int, key: str, wav: bytes) -> None:
+        query = urllib.parse.urlencode({"key": key, "is_group": "true"})
+        self._request("PUT", f"/jobs/{project_id}/{first_index}/result?{query}", wav, "audio/wav")
+
     def fail(self, project_id: str, index: int, error: str) -> None:
         self._json("POST", f"/jobs/{project_id}/{index}/fail", {"error": error[:500]})

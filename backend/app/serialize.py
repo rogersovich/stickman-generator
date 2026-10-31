@@ -27,5 +27,15 @@ def project_out(p: Project) -> dict:
         out["sentence_group_first"] = g_info.get("group_first", True)
         out["sentence_group_last"] = g_info.get("group_last", True)
         out["sentence_group_scenes"] = g_info.get("group_scenes", [idx])
+        if g_info.get("group_size", 1) > 1:
+            g_scenes = g_info.get("group_scenes", [idx])
+            first_idx = g_scenes[0]
+            out["sentence_group_audio"] = f"audio/scene_{first_idx + 1:03d}_group.wav"
+            out["sentence_group_duration"] = round(sum((p.scenes[si].audio_duration or 0.0) for si in g_scenes), 3)
+            all_done = all(p.scenes[si].audio_status == "done" for si in g_scenes)
+            any_gen = any(p.scenes[si].audio_status == "generating" for si in g_scenes)
+            any_q = any(p.scenes[si].audio_status == "queued" for si in g_scenes)
+            any_fail = any(p.scenes[si].audio_status == "failed" for si in g_scenes)
+            out["sentence_group_status"] = "done" if all_done else ("generating" if any_gen else ("queued" if any_q else ("failed" if any_fail else "pending")))
     return data
 

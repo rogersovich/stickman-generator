@@ -5,7 +5,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from . import sfx, storage
+import wave
+from . import audio, sfx, storage
 from .capcut import CapCutDraftGenerator
 
 
@@ -33,6 +34,10 @@ def export_project_to_capcut(
     sfx_tracks = []
     current_time_s = 0.0
 
+    groups = audio.get_sentence_groups(p.scenes)
+    group_by_first = {g[0]: g for g in groups if len(g) > 1}
+    grouped_secondary_indices = {idx for g in groups if len(g) > 1 for idx in g[1:]}
+
     for i, s in enumerate(p.scenes):
         img_path = (p_dir / s.image_file) if s.image_file else None
         audio_path = (p_dir / s.audio_file) if s.audio_file else None
@@ -46,13 +51,39 @@ def export_project_to_capcut(
                 "chapter": f"Scene {i+1}",
             })
 
-        if audio_path and audio_path.exists():
-            audio_tracks.append({
-                "path": audio_path,
-                "duration": dur,
-                "start_s": current_time_s,
-                "chapter": f"Scene {i+1}",
-            })
+        # Group audio handling: use continuous group audio track for multi-scene sentences
+        if i in group_by_first:
+            group_indices = group_by_first[i]
+            group_wav = p_dir / "audio" / f"scene_{i + 1:03d}_group.wav"
+            if not group_wav.is_file():
+                scene_wavs = [(p_dir / p.scenes[si].audio_file) for si in group_indices if p.scenes[si].audio_file]
+                if len(scene_wavs) == len(group_indices) and all(w.is_file() for w in scene_wavs):
+                    audio.concat_wav_files(scene_wavs, group_wav)
+
+            if group_wav.is_file():
+                with wave.open(str(group_wav), "rb") as w:
+                    group_dur = round(w.getnframes() / float(w.getframerate()), 3)
+                audio_tracks.append({
+                    "path": group_wav,
+                    "duration": group_dur,
+                    "start_s": current_time_s,
+                    "chapter": f"Scene {i+1}–{group_indices[-1]+1}",
+                })
+            elif audio_path and audio_path.exists():
+                audio_tracks.append({
+                    "path": audio_path,
+                    "duration": dur,
+                    "start_s": current_time_s,
+                    "chapter": f"Scene {i+1}",
+                })
+        elif i not in grouped_secondary_indices:
+            if audio_path and audio_path.exists():
+                audio_tracks.append({
+                    "path": audio_path,
+                    "duration": dur,
+                    "start_s": current_time_s,
+                    "chapter": f"Scene {i+1}",
+                })
 
         if include_sfx and s.sfx_id and sfx.get(s.sfx_id):
             clip = min(sfx.duration(s.sfx_id), dur)

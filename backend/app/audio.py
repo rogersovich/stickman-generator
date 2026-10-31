@@ -262,6 +262,39 @@ def _take_lease(project_id: str, index: int, name: str) -> None:
     del _leases[(project_id, index)]
 
 
+def concat_wav_files(files: list, out_file) -> None:
+    if not files:
+        return
+    import wave
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(files[0]), 'rb') as w0:
+        params = w0.getparams()
+    with wave.open(str(out_file), 'wb') as out_w:
+        out_w.setparams(params)
+        for f in files:
+            with wave.open(str(f), 'rb') as in_w:
+                out_w.writeframes(in_w.readframes(in_w.getnframes()))
+
+
+def save_group_result(project_id: str, index: int, name: str, key: str, data: bytes) -> Project:
+    if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        raise ValueError("not a WAV file")
+    with storage.lock:
+        p = _load(project_id)
+        d = storage.project_dir(project_id) / "audio"
+        d.mkdir(parents=True, exist_ok=True)
+        name_ = f"scene_{index + 1:03d}_group.wav"
+        dest_file = d / name_
+        dest_file.write_bytes(data)
+        if config.has_r2():
+            try:
+                from . import r2
+                r2.upload_file(dest_file, f"projects/{project_id}/audio/{name_}", "audio/wav")
+            except Exception:
+                pass
+        return p
+
+
 def save_result(project_id: str, index: int, name: str, key: str, data: bytes) -> Project:
     if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
         raise ValueError("not a WAV file")

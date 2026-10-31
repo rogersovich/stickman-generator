@@ -308,18 +308,25 @@ export default function AudioView({ project, setProject }) {
     }
 
     const a = playAllAudioRef.current;
-    a.src = api.audioUrl(id, s.audio_file, s.audio_key);
+    const isGroupedPlay = (s.sentence_group_size ?? 1) > 1;
+    const audioSrc = isGroupedPlay && s.sentence_group_audio
+      ? api.audioUrl(id, s.sentence_group_audio, s.audio_key)
+      : api.audioUrl(id, s.audio_file, s.audio_key);
+    a.src = audioSrc;
     a.currentTime = 0;
 
     a.ontimeupdate = () => {
       if (stopRequestedRef.current) return;
       setPlayCurrentTime(a.currentTime);
-      setPlayDuration(a.duration || s.audio_duration || 0);
+      setPlayDuration(a.duration || (isGroupedPlay ? s.sentence_group_duration : s.audio_duration) || 0);
     };
 
     a.onended = () => {
       if (stopRequestedRef.current) return;
-      const next = findNextPlayable(index + 1);
+      const nextIdx = isGroupedPlay && s.sentence_group_scenes
+        ? s.sentence_group_scenes[s.sentence_group_scenes.length - 1] + 1
+        : index + 1;
+      const next = findNextPlayable(nextIdx);
       if (next !== -1) {
         playSceneAudio(next);
       } else {
@@ -652,33 +659,81 @@ export default function AudioView({ project, setProject }) {
           return (
             <div key={i} className={isGrouped && isGroupFirst ? "mt-3 first:mt-0" : ""}>
               {isGrouped && isGroupFirst && (
-                <div className="flex items-center justify-between px-3.5 py-1.5 rounded-t-lg bg-gradient-to-r from-amber-500/15 via-[#181c26] to-transparent border-t border-l border-r border-amber-500/30 text-[11px] font-mono text-amber-300/90 shadow-sm">
-                  <div className="flex items-center gap-2 font-medium">
-                    <span className="size-2 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
-                    <span className="font-bold text-amber-200">Grup Kalimat #{s.sentence_group + 1}</span>
-                    <span className="text-slate-400 text-[10px]">
-                      (Scene #{groupScenes[0] + 1} – #{groupScenes[groupScenes.length - 1] + 1} · {s.sentence_group_size} scene digabung saat TTS)
-                    </span>
+                <div className="rounded-t-lg bg-gradient-to-r from-emerald-500/15 via-[#181c26] to-[#141720] border-t border-l border-r border-emerald-500/30 shadow-sm overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 border-b border-emerald-500/20 text-[11px] font-mono text-emerald-300/90">
+                    <div className="flex items-center gap-2 font-medium">
+                      <span className="size-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+                      <span className="font-bold text-emerald-200">Grup Kalimat #{s.sentence_group + 1}</span>
+                      <span className="text-slate-400 text-[10px]">
+                        (Scene #{groupScenes[0] + 1} – #{groupScenes[groupScenes.length - 1] + 1} · {s.sentence_group_size} scene digabung saat TTS)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {groupScenes.some(idx => scenes[idx]?.audio_status === 'generating' || scenes[idx]?.audio_status === 'queued') ? (
+                        <button
+                          className="btn-ghost px-2 py-0.5 text-[10px] text-red-300 hover:text-white hover:bg-red-500/20 flex items-center gap-1 border border-red-500/40 rounded transition"
+                          onClick={() => act(() => api.cancelAudio(id, groupScenes))}
+                          title="Batalkan generate seluruh kalimat ini"
+                        >
+                          <X size={10} />
+                          <span>Batal Grup</span>
+                        </button>
+                      ) : (
+                        <button
+                          className="btn-ghost px-2 py-0.5 text-[10px] text-emerald-300 hover:text-white hover:bg-emerald-500/20 flex items-center gap-1 border border-emerald-500/30 rounded transition"
+                          onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: groupScenes }))}
+                          title="Generate ulang seluruh kalimat ini bersamaan"
+                        >
+                          <RotateCcw size={10} />
+                          <span>Generate Grup</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {groupScenes.some(idx => scenes[idx]?.audio_status === 'generating' || scenes[idx]?.audio_status === 'queued') ? (
-                      <button
-                        className="btn-ghost px-2 py-0.5 text-[10px] text-red-300 hover:text-white hover:bg-red-500/20 flex items-center gap-1 border border-red-500/40 rounded transition"
-                        onClick={() => act(() => api.cancelAudio(id, groupScenes))}
-                        title="Batalkan generate seluruh kalimat ini"
-                      >
-                        <X size={10} />
-                        <span>Batal Grup</span>
-                      </button>
+
+                  {/* Combined Group Audio Player */}
+                  <div className="flex flex-wrap items-center gap-3 px-3.5 py-2 bg-[#12151d]/90 border-b border-[#292e3b]/50">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono text-[9px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <Volume2 size={10} /> Audio Kalimat Utuh
+                      </span>
+                      <span className="font-mono text-[11px] text-slate-300 font-semibold">
+                        {fmtSec(s.sentence_group_duration ?? groupScenes.reduce((acc, idx) => acc + (scenes[idx]?.audio_duration || 0), 0))}
+                      </span>
+                    </div>
+
+                    {s.sentence_group_status === "done" && s.sentence_group_audio ? (
+                      <>
+                        <audio
+                          controls
+                          preload="none"
+                          src={api.audioUrl(id, s.sentence_group_audio, s.audio_key)}
+                          className="h-8 min-w-0 flex-1"
+                          onPlay={() => {
+                            if (playingAll) stopPlayAll();
+                          }}
+                        />
+                        <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] text-emerald-400 font-semibold uppercase">
+                          SELESAI
+                        </span>
+                      </>
+                    ) : groupScenes.some(idx => scenes[idx]?.audio_status === 'generating') ? (
+                      <div className="flex-1 flex items-center gap-2 text-xs text-emerald-300/80 font-mono py-1">
+                        <Loader2 size={13} className="animate-spin text-emerald-400" />
+                        <span>Sedang memproses audio grup kalimat...</span>
+                      </div>
+                    ) : groupScenes.some(idx => scenes[idx]?.audio_status === 'queued') ? (
+                      <div className="flex-1 text-xs text-amber-300/80 font-mono py-1">
+                        Menunggu antrean audio grup...
+                      </div>
+                    ) : groupScenes.some(idx => scenes[idx]?.audio_status === 'failed') ? (
+                      <div className="flex-1 text-xs text-red-300 font-mono py-1">
+                        {scenes.find(sc => sc?.audio_error)?.audio_error || "Gagal generate audio grup"}
+                      </div>
                     ) : (
-                      <button
-                        className="btn-ghost px-2 py-0.5 text-[10px] text-amber-300 hover:text-white hover:bg-amber-500/20 flex items-center gap-1 border border-amber-500/30 rounded transition"
-                        onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: groupScenes }))}
-                        title="Generate ulang seluruh kalimat ini bersamaan"
-                      >
-                        <RotateCcw size={10} />
-                        <span>Generate Grup</span>
-                      </button>
+                      <div className="flex-1 text-xs text-slate-500 font-mono py-1">
+                        Audio kalimat belum dibuat. Klik 'Generate Grup' untuk membuat audio.
+                      </div>
                     )}
                   </div>
                 </div>
@@ -687,7 +742,7 @@ export default function AudioView({ project, setProject }) {
                 id={`audio-scene-${i}`}
                 className={`card flex scroll-mt-72 flex-col gap-3 p-3 sm:flex-row sm:items-center transition-all duration-200 ${
                   isGrouped
-                    ? `border-l-4 border-l-amber-500/80 bg-[#141720]/80 ${
+                    ? `border-l-4 border-l-emerald-500/80 bg-[#141720]/80 ${
                         isGroupFirst ? "rounded-t-none border-t-0" : ""
                       } ${!isGroupFirst && !isGroupLast ? "rounded-none border-t border-b border-[#292e3b]/30 -mt-2" : ""} ${
                         isGroupLast ? "rounded-t-none -mt-2" : ""
@@ -695,7 +750,7 @@ export default function AudioView({ project, setProject }) {
                     : ""
                 } ${
                   isCurrentPlayAll
-                    ? "ring-2 ring-amber-400 border-amber-500/70 bg-amber-500/10 shadow-lg shadow-amber-500/10"
+                    ? "ring-2 ring-emerald-400 border-emerald-500/70 bg-emerald-500/10 shadow-lg shadow-emerald-500/10"
                     : failedNav.flash === i
                     ? "ring-2 ring-red-400 ring-offset-2 ring-offset-[#0f1117]"
                     : s.audio_status === "failed"
@@ -711,7 +766,7 @@ export default function AudioView({ project, setProject }) {
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-bold text-slate-400">#{i + 1}</span>
                     {isGrouped && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-amber-500/10 text-amber-300/80 border border-amber-500/20" title={`Bagian dari grup kalimat #${s.sentence_group + 1}`}>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500/10 text-emerald-300/80 border border-emerald-500/20" title={`Bagian dari grup kalimat #${s.sentence_group + 1}`}>
                         Grup
                       </span>
                     )}
@@ -719,8 +774,8 @@ export default function AudioView({ project, setProject }) {
                       <button
                         className={`px-1.5 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 transition ${
                           isCurrentPlayAll && isPlaying
-                            ? "bg-amber-400 text-slate-950 font-bold"
-                            : "bg-[#292e3b]/60 text-slate-300 hover:bg-amber-500/20 hover:text-amber-300"
+                            ? "bg-emerald-400 text-slate-950 font-bold"
+                            : "bg-[#292e3b]/60 text-slate-300 hover:bg-emerald-500/20 hover:text-emerald-300"
                         }`}
                         onClick={() => {
                           if (isCurrentPlayAll) {
@@ -749,90 +804,112 @@ export default function AudioView({ project, setProject }) {
                 </div>
               </div>
 
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                {s.audio_file && s.audio_status === "done" ? (
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 justify-end sm:justify-start">
+                {isGrouped ? (
+                  // Inside a group: clean per-scene image duration badge
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="font-mono text-[11px] text-slate-300 bg-[#1a1e29] px-2.5 py-1 rounded border border-slate-700/50 flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider">Durasi Scene:</span>
+                      <b className="text-emerald-400">{fmtSec(s.audio_duration ?? 0)}</b>
+                    </span>
+                    {isCurrentPlayAll ? (
+                      <span className="rounded-md border border-emerald-400/50 bg-emerald-400/20 px-2 py-0.5 font-mono text-[10px] text-emerald-300 font-bold tracking-wider uppercase animate-pulse flex items-center gap-1">
+                        <Volume2 size={11} /> SEDANG DIPUTAR
+                      </span>
+                    ) : (
+                      <span className={`rounded-md border px-2 py-0.5 font-mono text-[10px] tracking-wider uppercase font-semibold ${tone}`}>
+                        {label}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  // Standalone scene: individual audio player
                   <>
-                    <audio
-                      controls
-                      preload="none"
-                      src={api.audioUrl(id, s.audio_file, s.audio_key)}
-                      className="h-8 min-w-0 flex-1"
-                      onPlay={() => {
-                        if (playingAll) stopPlayAll();
-                      }}
-                    />
-                    <span className="font-mono text-[11px] text-slate-400">{fmtSec(s.audio_duration ?? 0)}</span>
+                    {s.audio_file && s.audio_status === "done" ? (
+                      <>
+                        <audio
+                          controls
+                          preload="none"
+                          src={api.audioUrl(id, s.audio_file, s.audio_key)}
+                          className="h-8 min-w-0 flex-1"
+                          onPlay={() => {
+                            if (playingAll) stopPlayAll();
+                          }}
+                        />
+                        <span className="font-mono text-[11px] text-slate-400">{fmtSec(s.audio_duration ?? 0)}</span>
+                      </>
+                    ) : (
+                      <span className="flex-1 text-xs text-red-300">{s.audio_error}</span>
+                    )}
+
+                    {isCurrentPlayAll ? (
+                      <span className="rounded-md border border-amber-400/50 bg-amber-400/20 px-2 py-0.5 font-mono text-[10px] text-amber-300 font-bold tracking-wider uppercase animate-pulse flex items-center gap-1">
+                        <Volume2 size={11} /> SEDANG DIPUTAR
+                      </span>
+                    ) : (
+                      <span className={`rounded-md border px-2 py-0.5 font-mono text-[10px] tracking-wider uppercase font-semibold ${tone}`}>
+                        {label}
+                      </span>
+                    )}
+
+                    {s.audio_status === "generating" ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          className="btn-ghost px-2.5 py-1 text-[11px] text-amber-300 opacity-80 cursor-wait flex items-center gap-1.5"
+                          disabled
+                        >
+                          <Loader2 size={12} className="animate-spin text-amber-400" />
+                          <span>Memproses...</span>
+                        </button>
+                        <button
+                          className="rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-300 hover:bg-red-500/25 hover:text-white flex items-center gap-1 transition"
+                          onClick={() => act(() => api.cancelAudio(id, [i]))}
+                          title="Batalkan generate scene ini"
+                        >
+                          <X size={11} />
+                          <span>Batal</span>
+                        </button>
+                      </div>
+                    ) : s.audio_status === "queued" ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          className="rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-300 hover:bg-red-500/25 hover:text-white flex items-center gap-1 transition font-medium"
+                          onClick={() => act(() => api.cancelAudio(id, [i]))}
+                          title="Batalkan antrean scene ini"
+                        >
+                          <X size={12} />
+                          <span>Batal Antre</span>
+                        </button>
+                      </div>
+                    ) : s.audio_file && s.audio_status === "done" && !s.audio_stale ? (
+                      <button
+                        className="btn-ghost px-2.5 py-1 text-[11px] text-slate-300 hover:text-white flex items-center gap-1.5 transition"
+                        onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: [i] }))}
+                        title="Generate ulang audio untuk scene ini"
+                      >
+                        <RotateCcw size={12} className="text-slate-400" />
+                        <span>Generate Ulang</span>
+                      </button>
+                    ) : s.audio_status === "failed" ? (
+                      <button
+                        className="rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-300 hover:bg-red-500/20 hover:border-red-500/60 flex items-center gap-1.5 transition"
+                        onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: [i] }))}
+                        title="Coba generate ulang audio yang gagal"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Coba Lagi</span>
+                      </button>
+                    ) : (
+                      <button
+                        className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/60 flex items-center gap-1.5 transition shadow-sm"
+                        onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: [i] }))}
+                        title="Generate audio untuk scene ini"
+                      >
+                        <AudioLines size={12} className="text-amber-400" />
+                        <span>Generate Audio</span>
+                      </button>
+                    )}
                   </>
-                ) : (
-                  <span className="flex-1 text-xs text-red-300">{s.audio_error}</span>
-                )}
-
-                {isCurrentPlayAll ? (
-                  <span className="rounded-md border border-amber-400/50 bg-amber-400/20 px-2 py-0.5 font-mono text-[10px] text-amber-300 font-bold tracking-wider uppercase animate-pulse flex items-center gap-1">
-                    <Volume2 size={11} /> SEDANG DIPUTAR
-                  </span>
-                ) : (
-                  <span className={`rounded-md border px-2 py-0.5 font-mono text-[10px] tracking-wider uppercase font-semibold ${tone}`}>
-                    {label}
-                  </span>
-                )}
-
-                {s.audio_status === "generating" ? (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      className="btn-ghost px-2.5 py-1 text-[11px] text-amber-300 opacity-80 cursor-wait flex items-center gap-1.5"
-                      disabled
-                    >
-                      <Loader2 size={12} className="animate-spin text-amber-400" />
-                      <span>Memproses...</span>
-                    </button>
-                    <button
-                      className="rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-300 hover:bg-red-500/25 hover:text-white flex items-center gap-1 transition"
-                      onClick={() => act(() => api.cancelAudio(id, isGrouped ? groupScenes : [i]))}
-                      title={isGrouped ? "Batalkan generate grup ini" : "Batalkan generate scene ini"}
-                    >
-                      <X size={11} />
-                      <span>Batal</span>
-                    </button>
-                  </div>
-                ) : s.audio_status === "queued" ? (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      className="rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-300 hover:bg-red-500/25 hover:text-white flex items-center gap-1 transition font-medium"
-                      onClick={() => act(() => api.cancelAudio(id, isGrouped ? groupScenes : [i]))}
-                      title={isGrouped ? "Batalkan antrean grup ini" : "Batalkan antrean scene ini"}
-                    >
-                      <X size={12} />
-                      <span>Batal Antre</span>
-                    </button>
-                  </div>
-                ) : s.audio_file && s.audio_status === "done" && !s.audio_stale ? (
-                  <button
-                    className="btn-ghost px-2.5 py-1 text-[11px] text-slate-300 hover:text-white flex items-center gap-1.5 transition"
-                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: isGrouped ? groupScenes : [i] }))}
-                    title={isGrouped ? `Generate ulang seluruh grup kalimat (${groupScenes.length} scene)` : "Generate ulang audio untuk scene ini"}
-                  >
-                    <RotateCcw size={12} className="text-slate-400" />
-                    <span>{isGrouped ? "Generate Grup" : "Generate Ulang"}</span>
-                  </button>
-                ) : s.audio_status === "failed" ? (
-                  <button
-                    className="rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-300 hover:bg-red-500/20 hover:border-red-500/60 flex items-center gap-1.5 transition"
-                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: isGrouped ? groupScenes : [i] }))}
-                    title="Coba generate ulang audio yang gagal"
-                  >
-                    <RotateCcw size={12} />
-                    <span>{isGrouped ? "Coba Lagi Grup" : "Coba Lagi"}</span>
-                  </button>
-                ) : (
-                  <button
-                    className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/60 flex items-center gap-1.5 transition shadow-sm"
-                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: isGrouped ? groupScenes : [i] }))}
-                    title={isGrouped ? `Generate grup kalimat (${groupScenes.length} scene)` : "Generate audio untuk scene ini"}
-                  >
-                    <AudioLines size={12} className="text-amber-400" />
-                    <span>{isGrouped ? "Generate Grup" : "Generate Audio"}</span>
-                  </button>
                 )}
               </div>
             </li>

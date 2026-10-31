@@ -147,13 +147,26 @@ def tts_status():
 
 @router.get("/files/{project_id}/audio/{name}")
 def audio_file(project_id: str, name: str):
-    if not re.fullmatch(r"scene_\d{3}\.wav", name):
+    if not re.fullmatch(r"(?:scene_\d{3}(?:_group)?|group_\d{3})\.wav", name):
         raise HTTPException(404)
     try:
         f = storage.project_dir(project_id) / "audio" / name
     except ValueError:
         raise HTTPException(404)
     if not f.is_file():
+        m = re.fullmatch(r"scene_(\d{3})_group\.wav", name)
+        if m:
+            first_idx = int(m.group(1)) - 1
+            p = storage.load(project_id)
+            if p and 0 <= first_idx < len(p.scenes):
+                groups = audio.get_sentence_groups(p.scenes)
+                for g in groups:
+                    if g and g[0] == first_idx:
+                        p_dir = storage.project_dir(project_id)
+                        scene_files = [(p_dir / p.scenes[si].audio_file) for si in g if p.scenes[si].audio_file]
+                        if len(scene_files) == len(g) and all(sf.is_file() for sf in scene_files):
+                            audio.concat_wav_files(scene_files, f)
+                            return FileResponse(f, media_type="audio/wav")
         if config.has_r2():
             try:
                 from . import r2
@@ -187,8 +200,11 @@ def worker_voice_audio(voice_id: str):
 
 
 @router.put(f"{WORKER_PREFIX}/jobs/{{project_id}}/{{index}}/result", status_code=204, dependencies=[Depends(require_worker)])
-async def worker_result(project_id: str, index: int, key: str, request: Request, x_worker_name: str = Header()):
-    _errors(audio.save_result, project_id, index, x_worker_name, key, await request.body())
+async def worker_result(project_id: str, index: int, key: str, request: Request, is_group: bool = False, x_worker_name: str = Header()):
+    if is_group:
+        _errors(audio.save_group_result, project_id, index, x_worker_name, key, await request.body())
+    else:
+        _errors(audio.save_result, project_id, index, x_worker_name, key, await request.body())
 
 
 @router.post(f"{WORKER_PREFIX}/jobs/{{project_id}}/{{index}}/fail", status_code=204, dependencies=[Depends(require_worker)])
