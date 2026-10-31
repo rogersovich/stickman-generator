@@ -720,7 +720,7 @@ export default function Settings() {
         <div className="mt-4 pt-4 border-t border-[#292e3b] sm:max-w-sm">
           <Field label="Batas Waktu Tunggu Frame Flow (detik)" hint="Jika gambar tidak muncul dalam durasi ini, adegan ditandai gagal dan worker beralih ke adegan berikutnya.">
             <div className="relative">
-              <input className="input font-mono" type="number" min={30} max={1800} value={settings.image_timeout_sec} onChange={field("image_timeout_sec", Number)} />
+              <input className="input font-mono" type="number" min={10} max={1800} value={settings.image_timeout_sec} onChange={field("image_timeout_sec", Number)} />
               <span className="absolute right-3.5 top-2.5 font-mono text-xs text-slate-400">detik</span>
             </div>
           </Field>

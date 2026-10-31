@@ -82,7 +82,7 @@ class AppSettings(BaseModel):
     notifications: bool = True
 
     # advanced
-    image_timeout_sec: float = Field(240, ge=30, le=1800)
+    image_timeout_sec: float = Field(60.0, ge=10, le=1800)
 
     # narration audio (TTS): defaults, a project can override voice and model
     tts_voice_id: str | None = None

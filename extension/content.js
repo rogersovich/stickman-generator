@@ -37,7 +37,7 @@ const DEFAULT_WORKER_SETTINGS = {
   resolution: "2K",
   download_mode: "batch_end",
   notifications: true,
-  image_timeout_sec: 240,
+  image_timeout_sec: 60,
 };
 
 // ---------- small helpers ----------
