@@ -262,6 +262,18 @@ function Do-CheckGDrive {
     }
 }
 
+function Do-SyncLocal {
+    Write-Host ""
+    Write-Host ">> Menjalankan sinkronisasi proyek & gambar lokal ke Cloudflare D1 & R2..." -ForegroundColor Cyan
+    $pythonExe = Join-Path $ScriptDir "backend\.venv\Scripts\python.exe"
+    $syncScript = Join-Path $ScriptDir "sync_to_cloud.py"
+    if (Test-Path $pythonExe) {
+        & $pythonExe $syncScript
+    } else {
+        & python $syncScript
+    }
+}
+
 # Mode execution or Interactive Menu
 if ($Mode.ToLower() -eq "copy") {
     Do-Copy
@@ -278,6 +290,9 @@ if ($Mode.ToLower() -eq "copy") {
 } elseif ($Mode.ToLower() -eq "setup") {
     Do-SetupRemote
     exit 0
+} elseif ($Mode.ToLower() -eq "sync") {
+    Do-SyncLocal
+    exit 0
 }
 
 # Menu Interaktif
@@ -289,9 +304,10 @@ while ($true) {
     Write-Host "  [3] Cek Total Ukuran & File di R2" -ForegroundColor White
     Write-Host "  [4] Cek Isi Folder di Google Drive" -ForegroundColor White
     Write-Host "  [5] Hubungkan Ulang Akun Google Drive (rclone login)" -ForegroundColor White
+    Write-Host "  [6] Upload/Sync Proyek Lokal ke Cloud (D1 & R2)" -ForegroundColor Green
     Write-Host "  [0] Keluar" -ForegroundColor Gray
     Write-Host ""
-    $pilihan = Read-Host "Masukkan pilihan (0-5)"
+    $pilihan = Read-Host "Masukkan pilihan (0-6)"
 
     switch ($pilihan) {
         "1" { Do-Copy; break }
@@ -299,6 +315,7 @@ while ($true) {
         "3" { Do-CheckR2 }
         "4" { Do-CheckGDrive }
         "5" { Do-SetupRemote }
+        "6" { Do-SyncLocal }
         "0" { Write-Host "Selesai."; exit 0 }
         default { Write-Host "Pilihan tidak valid, coba lagi." -ForegroundColor Yellow }
     }

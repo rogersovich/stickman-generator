@@ -199,12 +199,25 @@ do_check_gdrive() {
   fi
 }
 
+do_sync_local() {
+  echo ""
+  echo ">> Menjalankan sinkronisasi proyek & gambar lokal ke Cloudflare D1 & R2..."
+  if [ -f "$SCRIPT_DIR/backend/.venv/bin/python" ]; then
+    "$SCRIPT_DIR/backend/.venv/bin/python" "$SCRIPT_DIR/sync_to_cloud.py"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 "$SCRIPT_DIR/sync_to_cloud.py"
+  else
+    python "$SCRIPT_DIR/sync_to_cloud.py"
+  fi
+}
+
 # Mode dari parameter baris perintah
 case "${1:-}" in
   copy) do_copy; exit 0 ;;
   move) do_move; exit 0 ;;
   check) do_check_r2; exit 0 ;;
   setup) do_setup_remote; exit 0 ;;
+  sync) do_sync_local; exit 0 ;;
 esac
 
 # Menu Interaktif
@@ -216,15 +229,17 @@ while true; do
   echo "  [3] Cek Total Ukuran & File di R2"
   echo "  [4] Cek Isi Folder di Google Drive"
   echo "  [5] Hubungkan Ulang Akun Google Drive (rclone login)"
+  echo "  [6] Upload/Sync Proyek Lokal ke Cloud (D1 & R2)"
   echo "  [0] Keluar"
   echo ""
-  read -p "Masukkan pilihan (0-5): " pilihan
+  read -p "Masukkan pilihan (0-6): " pilihan
   case "$pilihan" in
     1) do_copy; break ;;
     2) do_move; break ;;
     3) do_check_r2 ;;
     4) do_check_gdrive ;;
     5) do_setup_remote ;;
+    6) do_sync_local ;;
     0) echo "Selesai."; exit 0 ;;
     *) echo "Pilihan tidak valid, coba lagi." ;;
   esac
