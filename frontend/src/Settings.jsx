@@ -511,13 +511,13 @@ export default function Settings() {
               </div>
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                  storageStatus?.d1_active
+                  (storageStatus?.d1_active || storageStatus?.d1_connected)
                     ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                     : "bg-slate-800 text-slate-400 border border-slate-700"
                 }`}
               >
-                <span className={`size-1.5 rounded-full ${storageStatus?.d1_active ? "bg-emerald-400" : "bg-slate-400"}`} />
-                {storageStatus?.d1_active ? "Terhubung (Edge)" : "Lokal SQLite"}
+                <span className={`size-1.5 rounded-full ${(storageStatus?.d1_active || storageStatus?.d1_connected) ? "bg-emerald-400" : "bg-slate-400"}`} />
+                {(storageStatus?.d1_active || storageStatus?.d1_connected) ? "Terhubung (Edge)" : "Lokal SQLite"}
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
@@ -539,13 +539,13 @@ export default function Settings() {
               </div>
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                  storageStatus?.r2_active
+                  (storageStatus?.r2_active || storageStatus?.r2_connected)
                     ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                     : "bg-slate-800 text-slate-400 border border-slate-700"
                 }`}
               >
-                <span className={`size-1.5 rounded-full ${storageStatus?.r2_active ? "bg-emerald-400" : "bg-slate-400"}`} />
-                {storageStatus?.r2_active ? "Terhubung (S3 API)" : "Nonaktif (Lokal Disk)"}
+                <span className={`size-1.5 rounded-full ${(storageStatus?.r2_active || storageStatus?.r2_connected) ? "bg-emerald-400" : "bg-slate-400"}`} />
+                {(storageStatus?.r2_active || storageStatus?.r2_connected) ? "Terhubung (S3 API)" : "Nonaktif (Lokal Disk)"}
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">

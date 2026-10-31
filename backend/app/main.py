@@ -519,7 +519,11 @@ def get_storage_status():
 
     return {
         "d1_connected": config.has_d1(),
+        "d1_active": config.has_d1(),
+        "d1_database_id": config.CLOUDFLARE_D1_DATABASE_ID if config.has_d1() else None,
         "r2_connected": config.has_r2(),
+        "r2_active": config.has_r2(),
+        "r2_bucket": config.R2_BUCKET_NAME if config.has_r2() else None,
         "total_projects": total_projects,
         "backup_threshold": threshold,
         "needs_backup": needs_backup,
