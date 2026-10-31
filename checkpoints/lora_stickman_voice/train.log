@@ -1,0 +1,11 @@
+[train] step 0: loss/diff: 0.885272, loss/stop: 0.037020, lr: 0.000005, epoch: 0.000000, grad_norm: 0.053223
+[train] step 10: loss/diff: 0.847750, loss/stop: 0.137573, lr: 0.000055, epoch: 2.051282, grad_norm: 0.050781, log interval: 45.48s
+[train] step 20: loss/diff: 0.974414, loss/stop: 0.126600, lr: 0.000100, epoch: 4.102564, grad_norm: 0.052979, log interval: 46.24s
+[train] step 30: loss/diff: 0.886621, loss/stop: 0.016574, lr: 0.000095, epoch: 6.153846, grad_norm: 0.076172, log interval: 45.82s
+[train] step 40: loss/diff: 0.945141, loss/stop: 0.031537, lr: 0.000084, epoch: 8.205128, grad_norm: 0.063477, log interval: 46.99s
+[train] step 50: loss/diff: 0.812379, loss/stop: 0.004832, lr: 0.000067, epoch: 10.256410, grad_norm: 0.066895, log interval: 46.51s
+[train] step 60: loss/diff: 0.885911, loss/stop: 0.010338, lr: 0.000048, epoch: 12.307692, grad_norm: 0.057129, log interval: 46.82s
+[train] step 70: loss/diff: 0.886348, loss/stop: 0.003394, lr: 0.000029, epoch: 14.358974, grad_norm: 0.063477, log interval: 47.35s
+[train] step 80: loss/diff: 0.869347, loss/stop: 0.008007, lr: 0.000013, epoch: 16.410256, grad_norm: 0.076660, log interval: 46.82s
+[train] step 90: loss/diff: 0.804957, loss/stop: 0.004551, lr: 0.000003, epoch: 18.461538, grad_norm: 0.068359, log interval: 47.96s
+[train] step 99: loss/diff: 0.860547, loss/stop: 0.005957, lr: 0.000000, epoch: 20.307692, grad_norm: 0.064941, log interval: 42.11s

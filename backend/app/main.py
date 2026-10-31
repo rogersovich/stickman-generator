@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
-from . import config, db, jobs, settings, storage
+from . import config, db, jobs, settings, storage, tts, voices
 from .models import (
     CreateProjectIn,
     ImportMarkdownIn,
@@ -417,6 +417,10 @@ def download(project_id: str):
                 src_path = d / s.image_file
                 out_name = f"scene_{i + 1:03d}{src_path.suffix}"
                 z.write(src_path, out_name)
+            if s.audio_file and (d / s.audio_file).exists():
+                src_audio = d / s.audio_file
+                out_name = f"scene_{i + 1:03d}.wav"
+                z.write(src_audio, out_name)
 
     buf.seek(0)
     return StreamingResponse(
@@ -424,6 +428,42 @@ def download(project_id: str):
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{project_id}.zip"'},
     )
+
+
+# ---------- Voices & TTS ----------
+
+@app.get("/api/voices")
+def get_voices():
+    return voices.list_voices()
+
+
+@app.post("/api/projects/{project_id}/generate-audio")
+def generate_project_audio(project_id: str, voice_id: str = "suara-1", force: bool = False):
+    p = _get(project_id)
+    if not p.scenes:
+        raise HTTPException(400, "project has no scenes")
+    success = tts.start_voice_generation(project_id, voice_id=voice_id, force=force)
+    if not success:
+        raise HTTPException(409, "audio generation already in progress or failed to start")
+    return {"ok": True, "project_id": project_id, "voice_status": "generating"}
+
+
+@app.post("/api/projects/{project_id}/scenes/{index}/generate-audio")
+def generate_scene_audio(project_id: str, index: int, voice_id: str = "suara-1"):
+    p = _get(project_id)
+    if not (0 <= index < len(p.scenes)):
+        raise HTTPException(404, "scene not found")
+    success = tts.start_voice_generation(project_id, voice_id=voice_id, scene_index=index, force=True)
+    if not success:
+        raise HTTPException(409, "audio generation already in progress or failed to start")
+    return {"ok": True, "project_id": project_id, "scene_index": index}
+
+
+@app.post("/api/projects/{project_id}/stop-audio")
+def stop_project_audio(project_id: str):
+    p = _get(project_id)
+    tts.stop_voice_generation(project_id)
+    return {"ok": True, "voice_status": "idle"}
 
 
 # ---------- jobs (used by the browser extension) ----------

@@ -58,3 +58,8 @@ Thumbs.db
 output/
 output/*
 !output/.gitkeep
+
+# Checkpoint training artifacts (keep latest safetensors, ignore heavy training states)
+*.pth
+checkpoints/**/step_*
+checkpoints/**/logs/

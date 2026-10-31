@@ -38,6 +38,10 @@ export const api = {
   setNarration: (id, i, narration) => request("PUT", `/api/projects/${id}/scenes/${i}/narration`, { narration }),
   redownloadAll: (id) => request("POST", `/api/projects/${id}/redownload`),
   redownload: (id, i) => request("POST", `/api/projects/${id}/scenes/${i}/redownload`),
+  voices: () => request("GET", "/api/voices"),
+  generateAudio: (id, voiceId = "suara-1", force = false) => request("POST", `/api/projects/${id}/generate-audio?voice_id=${encodeURIComponent(voiceId)}&force=${force}`),
+  generateSceneAudio: (id, i, voiceId = "suara-1") => request("POST", `/api/projects/${id}/scenes/${i}/generate-audio?voice_id=${encodeURIComponent(voiceId)}`),
+  stopAudio: (id) => request("POST", `/api/projects/${id}/stop-audio`),
   downloadUrl: (id) => `/api/projects/${id}/download`,
   fileUrl: (id, name, v) => `/files/${id}/${name}?v=${encodeURIComponent(v ?? "")}`,
 };

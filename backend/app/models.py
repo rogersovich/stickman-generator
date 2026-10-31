@@ -28,6 +28,9 @@ class Scene(BaseModel):
     started_at: str | None = None
     image_hd: bool | None = None  # True = full-res download from Flow, False = thumbnail, None = unknown (old data)
     job_kind: JobKind = "generate"  # "redownload" = fetch the full-res file of an existing Flow image
+    audio_status: Literal["idle", "generating", "done", "failed"] = "idle"
+    audio_file: str | None = None
+    audio_error: str | None = None
 
 
 class Project(BaseModel):
@@ -41,6 +44,9 @@ class Project(BaseModel):
     style_id: str
     language: str = "Indonesia"
     status: ProjectStatus = "draft"
+    voice_id: str = "suara-1"
+    voice_status: Literal["idle", "generating", "done", "failed"] = "idle"
+    voice_error: str | None = None
     test_limit: int | None = None
     scenes: list[Scene] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)

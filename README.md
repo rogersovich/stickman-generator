@@ -38,7 +38,9 @@ Starts backend (:8000) + frontend (:5173) in one terminal. Ctrl+C stops both.
    - Adegan split-screen / gabungan (e.g. `DIGABUNG KE SCENE 27`) otomatis dideteksi dan tidak memotong kuota Flow ganda.
 4. Klik **Buat Project & Buka Storyboard**.
 5. Buka tab Google Flow di browser → aktifkan **Worker: ON** di side panel extension.
-6. Pantau progress real-time → **Download ZIP** (berisi seluruh gambar terurut `scene_001.png`, `scene_002.png` + `narration.txt` + `project.json`).
+6. Pantau progress real-time:
+   - **Voiceover (Suara 1)**: Klik tombol **Generate Audio (Suara 1)** di toolbar atau ikon `+ Suara 1` di tiap card frame untuk membuat suara narasi beresolusi studio 48kHz (VoxCPM2 + LoRA custom suaramu).
+   - **Download ZIP**: Berisi seluruh gambar terurut `scene_001.png`, audio narasi `scene_001.wav`, `narration.txt`, dan `project.json` yang siap langsung di-drag ke video editor (CapCut, Premiere, DaVinci).
 
 ### Mode B: Generate Naskah dengan AI
 1. Pilih tab **Generate dengan AI (9router)**.

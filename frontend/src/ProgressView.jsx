@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Clock, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, Trash2, WandSparkles, X, Zap } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Clock, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, Square, Trash2, Volume2, VolumeX, WandSparkles, X, Zap } from "lucide-react";
 import { api } from "./api.js";
 import NarrationEditor from "./NarrationEditor.jsx";
 import { useDialog } from "./ui.jsx";
@@ -22,7 +22,7 @@ function SceneNote({ scene }) {
   );
 }
 
-function Lightbox({ project, index, onClose, onNavigate, onRetry, onRedownload, onEditNarration }) {
+function Lightbox({ project, index, onClose, onNavigate, onRetry, onRedownload, onEditNarration, onGenerateSceneAudio }) {
   const scene = project.scenes[index];
   const [size, setSize] = useState(null);
   const count = project.scenes.length;
@@ -104,6 +104,47 @@ function Lightbox({ project, index, onClose, onNavigate, onRetry, onRedownload, 
           <div>
             <p className="label">Beat Narasi Suara</p>
             <p className="text-sm leading-relaxed text-slate-200">{scene.narration}</p>
+            {scene.audio_file ? (
+              <div className="mt-2.5 rounded-lg bg-[#0e1015] border border-[#292e3b] p-2.5 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-mono text-emerald-400">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    <Volume2 size={13} /> Suara 1 (Studio 48kHz)
+                  </span>
+                  {onGenerateSceneAudio && (
+                    <button
+                      className="text-slate-400 hover:text-amber-300 text-xs flex items-center gap-1 transition-colors"
+                      onClick={() => onGenerateSceneAudio(index)}
+                      title="Generate ulang audio scene ini"
+                    >
+                      <RotateCcw size={11} /> Ulang
+                    </button>
+                  )}
+                </div>
+                <audio
+                  controls
+                  className="w-full h-8 rounded border border-[#292e3b]/50 accent-amber-500"
+                  src={api.fileUrl(project.id, scene.audio_file, project.updated_at)}
+                  preload="metadata"
+                />
+              </div>
+            ) : scene.audio_status === "generating" ? (
+              <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-300 animate-pulse font-mono">
+                <Volume2 size={14} className="text-amber-400 animate-spin" />
+                <span>Men-generate Suara 1 (RTX 3060)...</span>
+              </div>
+            ) : scene.narration && onGenerateSceneAudio ? (
+              <div className="mt-2.5 flex items-center justify-between rounded-lg bg-[#12141a] border border-[#292e3b]/60 px-3 py-2 text-xs">
+                <span className="text-slate-400 flex items-center gap-1">
+                  <Volume2 size={13} className="text-slate-500" /> Audio belum dibuat
+                </span>
+                <button
+                  className="text-amber-400 hover:text-amber-300 font-semibold transition-colors"
+                  onClick={() => onGenerateSceneAudio(index)}
+                >
+                  + Buat Suara 1
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {scene.prompt ? (
@@ -181,7 +222,9 @@ function Lightbox({ project, index, onClose, onNavigate, onRetry, onRedownload, 
 export default function ProgressView({ project, setProject }) {
   const dialog = useDialog();
   const id = project.id;
-  const active = project.status === "generating";
+  const isVoiceActive = project.voice_status === "generating";
+  const active = project.status === "generating" || isVoiceActive;
+  const audioDone = project.scenes.filter((s) => s.audio_status === "done" && s.audio_file).length;
   const [preview, setPreview] = useState(null);
   const [settings, setSettings] = useState(null);
 
@@ -252,6 +295,37 @@ export default function ProgressView({ project, setProject }) {
     }
   }
 
+  async function handleGenerateAudio(force = false) {
+    try {
+      await api.generateAudio(id, project.voice_id || "suara-1", force);
+      setProject((p) => ({ ...p, voice_status: "generating" }));
+    } catch (e) {
+      await dialog.alert({ title: "Gagal memulai pembuatan audio", message: e.message });
+    }
+  }
+
+  async function handleStopAudio() {
+    try {
+      await api.stopAudio(id);
+      setProject((p) => ({ ...p, voice_status: "idle" }));
+    } catch (e) {
+      await dialog.alert({ title: "Gagal menghentikan audio", message: e.message });
+    }
+  }
+
+  async function handleGenerateSceneAudio(sceneIndex) {
+    try {
+      await api.generateSceneAudio(id, sceneIndex, project.voice_id || "suara-1");
+      setProject((p) => {
+        const nextScenes = [...p.scenes];
+        nextScenes[sceneIndex] = { ...nextScenes[sceneIndex], audio_status: "generating" };
+        return { ...p, voice_status: "generating", scenes: nextScenes };
+      });
+    } catch (e) {
+      await dialog.alert({ title: "Gagal membuat suara frame", message: e.message });
+    }
+  }
+
   async function handleSwap(a, b) {
     try {
       const updated = await api.swapScenes(id, a, b);
@@ -311,6 +385,24 @@ export default function ProgressView({ project, setProject }) {
               style={{ width: `${pct}%` }}
             />
           </div>
+
+          {/* Audio Telemetry Indicator */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 font-mono text-xs text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <Volume2 size={13} className={isVoiceActive ? "text-amber-400 animate-pulse" : audioDone > 0 ? "text-emerald-400" : "text-slate-500"} />
+              Narasi Audio (<b className="text-amber-300">Suara 1</b>): <b className={audioDone > 0 ? "text-emerald-400 font-semibold" : "text-slate-400"}>{audioDone}</b> / {project.scenes.length} audio siap
+            </span>
+            {isVoiceActive && (
+              <span className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-300 animate-pulse">
+                Sedang memproses audio (RTX 3060 48kHz)...
+              </span>
+            )}
+            {project.voice_error && (
+              <span className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs text-red-300">
+                Gagal: {project.voice_error}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Controls Bar */}
@@ -325,6 +417,31 @@ export default function ProgressView({ project, setProject }) {
               <Play size={14} /> Lanjutkan Worker
             </button>
           )}
+
+          {/* Tombol Voiceover Suara 1 */}
+          {isVoiceActive ? (
+            <button
+              className="btn-ghost text-xs border-rose-500/40 text-rose-300 hover:bg-rose-500/10"
+              onClick={handleStopAudio}
+              title="Hentikan proses generasi audio narasi"
+            >
+              <Square size={13} className="text-rose-400 fill-rose-400" /> Hentikan Audio
+            </button>
+          ) : (
+            <button
+              className="btn-ghost text-xs border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+              onClick={() => handleGenerateAudio(false)}
+              title="Generate narasi audio Suara 1 untuk seluruh adegan"
+            >
+              <Volume2 size={14} className="text-amber-400" />
+              {audioDone === 0
+                ? "Generate Audio (Suara 1)"
+                : audioDone < project.scenes.length
+                ? `Lanjutkan Audio (${audioDone}/${project.scenes.length})`
+                : "Generate Ulang Audio (Suara 1)"}
+            </button>
+          )}
+
           <button
             className="btn-ghost text-xs border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
             onClick={() => handleTestRun(2)}
@@ -436,6 +553,49 @@ export default function ProgressView({ project, setProject }) {
 
                 <p className="text-xs leading-relaxed text-slate-300 line-clamp-3">{s.narration}</p>
                 <SceneNote scene={s} />
+
+                {/* Audio Player Card Bar */}
+                {s.audio_file ? (
+                  <div className="rounded-lg bg-[#0e1015] border border-[#292e3b] p-2 space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-mono">
+                      <span className="flex items-center gap-1 text-emerald-400 font-medium">
+                        <Volume2 size={11} /> Suara 1 (Studio 48kHz)
+                      </span>
+                      <button
+                        className="text-slate-400 hover:text-amber-300 transition-colors p-0.5"
+                        onClick={() => handleGenerateSceneAudio(i)}
+                        title="Generate ulang audio frame ini"
+                        disabled={isVoiceActive}
+                      >
+                        <RotateCcw size={11} />
+                      </button>
+                    </div>
+                    <audio
+                      controls
+                      className="w-full h-7 rounded border border-[#292e3b]/50 accent-amber-500"
+                      src={api.fileUrl(id, s.audio_file, project.updated_at)}
+                      preload="metadata"
+                    />
+                  </div>
+                ) : s.audio_status === "generating" ? (
+                  <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 p-2 text-[11px] text-amber-300 animate-pulse font-mono">
+                    <Volume2 size={12} className="text-amber-400 animate-spin" />
+                    <span>Membuat Suara 1...</span>
+                  </div>
+                ) : s.narration ? (
+                  <div className="flex items-center justify-between rounded-lg bg-[#12141a] border border-[#292e3b]/60 px-2.5 py-1.5 text-[11px]">
+                    <span className="text-slate-400 flex items-center gap-1">
+                      <Volume2 size={12} className="text-slate-500" /> Audio belum ada
+                    </span>
+                    <button
+                      className="text-amber-400 hover:text-amber-300 font-semibold transition-colors disabled:opacity-50"
+                      onClick={() => handleGenerateSceneAudio(i)}
+                      disabled={isVoiceActive}
+                    >
+                      + Suara 1
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               <div className="pt-2 border-t border-[#292e3b]/60 space-y-1.5">
@@ -495,6 +655,7 @@ export default function ProgressView({ project, setProject }) {
           onNavigate={setPreview}
           onRetry={retry}
           onRedownload={redownload}
+          onGenerateSceneAudio={handleGenerateSceneAudio}
           onEditNarration={(i) => {
             setPreview(null);
             setNarrationIndex(i);
