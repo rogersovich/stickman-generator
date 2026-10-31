@@ -1,3 +1,4 @@
+import asyncio
 import io
 import zipfile
 from contextlib import asynccontextmanager
@@ -38,13 +39,16 @@ async def lifespan(app: FastAPI):
             import logging
             logging.getLogger("main").error(f"D1 init error: {e}")
     audio.reset_on_startup()
-    for p in storage.list_all():
-        try:
-            db.save_project_record(p)
-            if config.has_d1():
-                d1.save_project(p)
-        except Exception:
-            pass
+
+    async def _sync_local_db():
+        await asyncio.sleep(1)
+        for p in storage.list_all():
+            try:
+                db.save_project_record(p)
+            except Exception:
+                pass
+
+    asyncio.create_task(_sync_local_db())
     yield
 
 

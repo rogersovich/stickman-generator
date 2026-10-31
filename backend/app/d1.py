@@ -136,15 +136,46 @@ def save_project(project: Project) -> None:
         data_json,
     ])
 
-    for i, s in enumerate(project.scenes):
-        _query_d1("""
+    # Batch insert scenes in chunks of 20 to avoid hundreds of sequential HTTP calls
+    chunk_size = 20
+    for chunk_start in range(0, len(project.scenes), chunk_size):
+        chunk = project.scenes[chunk_start:chunk_start + chunk_size]
+        placeholders = []
+        params = []
+        for offset, s in enumerate(chunk):
+            idx = chunk_start + offset
+            placeholders.append("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            params.extend([
+                project.id,
+                idx,
+                s.narration,
+                s.prompt,
+                s.tag,
+                s.title_text,
+                s.scene_description,
+                s.image_status,
+                s.image_file,
+                s.flow_src,
+                s.audio_status,
+                s.audio_file,
+                s.error,
+                s.audio_error,
+                s.started_at,
+                1 if s.image_hd else 0,
+                s.job_kind,
+                1 if s.is_merged else 0,
+                s.merged_with,
+                project.updated_at,
+            ])
+        
+        sql = f"""
             INSERT INTO scenes (
                 project_id, scene_index, narration, prompt, tag, title_text,
                 scene_description, image_status, image_file, flow_src, audio_status,
                 audio_file, error, audio_error, started_at, image_hd, job_kind,
                 is_merged, merged_with, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES {", ".join(placeholders)}
             ON CONFLICT(project_id, scene_index) DO UPDATE SET
                 narration = excluded.narration,
                 prompt = excluded.prompt,
@@ -164,28 +195,8 @@ def save_project(project: Project) -> None:
                 is_merged = excluded.is_merged,
                 merged_with = excluded.merged_with,
                 updated_at = excluded.updated_at
-        """, [
-            project.id,
-            i,
-            s.narration,
-            s.prompt,
-            s.tag,
-            s.title_text,
-            s.scene_description,
-            s.image_status,
-            s.image_file,
-            s.flow_src,
-            s.audio_status,
-            s.audio_file,
-            s.error,
-            s.audio_error,
-            s.started_at,
-            1 if s.image_hd else 0,
-            s.job_kind,
-            1 if s.is_merged else 0,
-            s.merged_with,
-            project.updated_at,
-        ])
+        """
+        _query_d1(sql, params)
 
 
 def load_project(project_id: str) -> Optional[Project]:
