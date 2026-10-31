@@ -1,4 +1,19 @@
-import { AudioLines, Check, Library, Loader2, Pause, Pencil, Play, RotateCcw, X } from "lucide-react";
+import {
+  AudioLines,
+  Check,
+  ChevronUp,
+  Library,
+  Loader2,
+  Pause,
+  Pencil,
+  Play,
+  RotateCcw,
+  SkipBack,
+  SkipForward,
+  Square,
+  Volume2,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import FailedNav, { useFailedNav } from "./FailedNav.jsx";
@@ -17,6 +32,13 @@ const STATUS = {
 };
 
 const fmtSec = (s) => `${s.toFixed(1).replace(".", ",")} dtk`;
+
+const fmtTime = (s) => {
+  if (!s || isNaN(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+};
 
 function WorkerBadges({ status }) {
   const online = (status?.workers ?? []).filter((w) => w.online);
@@ -82,6 +104,29 @@ export default function AudioView({ project, setProject }) {
   const [playingPreview, setPlayingPreview] = useState(false);
   const previewAudioRef = useRef(null);
 
+  // Play All Sequential Playback State
+  const [playingAll, setPlayingAll] = useState(false);
+  const [currentPlayingIndex, setCurrentPlayingIndex] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playCurrentTime, setPlayCurrentTime] = useState(0);
+  const [playDuration, setPlayDuration] = useState(0);
+  const playAllAudioRef = useRef(null);
+
+  // Floating Scroll-To-Top State
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setShowScrollTop(window.scrollY > 220);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   function stopPreview() {
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
@@ -100,6 +145,7 @@ export default function AudioView({ project, setProject }) {
       return;
     }
     if (!voiceId) return;
+    if (playingAll) stopPlayAll();
     const a = new Audio(api.voiceAudioUrl(voiceId));
     previewAudioRef.current = a;
     setPlayingPreview(true);
@@ -118,7 +164,13 @@ export default function AudioView({ project, setProject }) {
   }
 
   useEffect(() => {
-    return () => stopPreview();
+    return () => {
+      stopPreview();
+      if (playAllAudioRef.current) {
+        playAllAudioRef.current.pause();
+        playAllAudioRef.current = null;
+      }
+    };
   }, []);
 
   const scenes = project.scenes;
@@ -179,12 +231,161 @@ export default function AudioView({ project, setProject }) {
     if (ok) act(() => api.generateAudio(id, { mode: "all" }));
   }
 
+  // --- PLAY ALL SEQUENTIAL PLAYBACK LOGIC ---
+  const stopPlayAll = () => {
+    if (playAllAudioRef.current) {
+      playAllAudioRef.current.pause();
+      playAllAudioRef.current.src = "";
+      playAllAudioRef.current = null;
+    }
+    setPlayingAll(false);
+    setCurrentPlayingIndex(null);
+    setIsPlaying(false);
+    setPlayCurrentTime(0);
+    setPlayDuration(0);
+  };
+
+  const findNextPlayable = (startIdx) => {
+    for (let i = startIdx; i < scenes.length; i++) {
+      if (scenes[i].audio_status === "done" && scenes[i].audio_file) {
+        return i;
+      }
+    }
+    return -1;
+  };
+
+  const findPrevPlayable = (startIdx) => {
+    for (let i = startIdx - 1; i >= 0; i--) {
+      if (scenes[i].audio_status === "done" && scenes[i].audio_file) {
+        return i;
+      }
+    }
+    return -1;
+  };
+
+  const playSceneAudio = (index) => {
+    if (index < 0 || index >= scenes.length) {
+      stopPlayAll();
+      return;
+    }
+    const s = scenes[index];
+    if (!s.audio_file || s.audio_status !== "done") {
+      const next = findNextPlayable(index + 1);
+      if (next !== -1) {
+        playSceneAudio(next);
+      } else {
+        stopPlayAll();
+      }
+      return;
+    }
+
+    stopPreview();
+
+    if (!playAllAudioRef.current) {
+      playAllAudioRef.current = new Audio();
+    }
+    const a = playAllAudioRef.current;
+    a.src = api.audioUrl(id, s.audio_file, s.audio_key);
+    a.currentTime = 0;
+
+    a.ontimeupdate = () => {
+      setPlayCurrentTime(a.currentTime);
+      setPlayDuration(a.duration || s.audio_duration || 0);
+    };
+
+    a.onended = () => {
+      const next = findNextPlayable(index + 1);
+      if (next !== -1) {
+        playSceneAudio(next);
+      } else {
+        stopPlayAll();
+      }
+    };
+
+    a.onerror = () => {
+      const next = findNextPlayable(index + 1);
+      if (next !== -1) {
+        playSceneAudio(next);
+      } else {
+        stopPlayAll();
+      }
+    };
+
+    setCurrentPlayingIndex(index);
+    setPlayingAll(true);
+    setIsPlaying(true);
+    setPlayCurrentTime(0);
+    setPlayDuration(s.audio_duration || 0);
+
+    a.play().catch((err) => {
+      console.warn("Playback error:", err);
+      setIsPlaying(false);
+    });
+
+    // Auto-scroll to currently playing scene
+    const el = document.getElementById(`audio-scene-${index}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
+
+  const startPlayAll = (fromIndex = 0) => {
+    const target = findNextPlayable(fromIndex);
+    if (target === -1) {
+      dialog.alert({
+        title: "Audio Belum Siap",
+        message: "Belum ada adegan dengan audio selesai untuk diputar.",
+      });
+      return;
+    }
+    playSceneAudio(target);
+  };
+
+  const togglePlayPause = () => {
+    if (!playingAll || currentPlayingIndex === null) {
+      startPlayAll(0);
+      return;
+    }
+    const a = playAllAudioRef.current;
+    if (!a) return;
+    if (isPlaying) {
+      a.pause();
+      setIsPlaying(false);
+    } else {
+      a.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
+  };
+
+  const playNextScene = () => {
+    if (currentPlayingIndex === null) return;
+    const next = findNextPlayable(currentPlayingIndex + 1);
+    if (next !== -1) {
+      playSceneAudio(next);
+    }
+  };
+
+  const playPrevScene = () => {
+    if (currentPlayingIndex === null) return;
+    const prev = findPrevPlayable(currentPlayingIndex);
+    if (prev !== -1) {
+      playSceneAudio(prev);
+    }
+  };
+
   return (
-    <div className="space-y-5">
-      <div className="panel space-y-4 p-6">
+    <div className="space-y-5 relative">
+      {/* SECTION AUDIO NARASI (Sticky saat di-scroll) */}
+      <div className="panel space-y-4 p-5 sm:p-6 sticky top-3 z-30 bg-[#161920]/95 backdrop-blur-md shadow-2xl border border-[#292e3b] transition-all">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-100">Audio Narasi</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+              <span>Audio Narasi</span>
+              {playingAll && isPlaying && (
+                <span className="flex items-center gap-1 text-[11px] font-mono text-amber-300 font-normal bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full animate-pulse">
+                  <Volume2 size={12} /> Play All Aktif
+                </span>
+              )}
+            </h1>
             <p className="mt-1 text-sm text-slate-400">Satu klip suara per scene, dibuat oleh worker TTS di Mac atau PC.</p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -219,13 +420,46 @@ export default function AudioView({ project, setProject }) {
           </div>
         </div>
 
+        {/* Action bar */}
         <div className="flex flex-wrap items-center gap-2.5 border-t border-[#292e3b] pt-4">
           <span className="font-mono text-xs text-slate-400">
             Audio <b className="text-amber-400">{done}</b>/{scenes.length}
             {stale > 0 && <span className="ml-2 text-amber-300">({stale} basi)</span>}
             {totalSec > 0 && <span className="ml-2">· total {Math.floor(totalSec / 60)}m {Math.round(totalSec % 60)}d</span>}
           </span>
-          <div className="ml-auto flex flex-wrap gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {/* Tombol Play All */}
+            {done > 0 && (
+              <button
+                className={`btn text-xs flex items-center gap-1.5 font-semibold transition ${
+                  playingAll
+                    ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 hover:bg-amber-400 active:bg-amber-600"
+                    : "border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/60"
+                }`}
+                onClick={togglePlayPause}
+                title={playingAll ? (isPlaying ? "Jeda putar semua audio" : "Lanjutkan putar audio") : "Putar semua audio secara berurutan"}
+              >
+                {playingAll ? (
+                  isPlaying ? (
+                    <>
+                      <Pause size={13} className="fill-current" />
+                      <span>Jeda Putar ({currentPlayingIndex !== null ? `#${currentPlayingIndex + 1}` : ""})</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play size={13} className="fill-current" />
+                      <span>Lanjutkan (#{currentPlayingIndex !== null ? currentPlayingIndex + 1 : 1})</span>
+                    </>
+                  )
+                ) : (
+                  <>
+                    <Play size={13} className="fill-current" />
+                    <span>Putar Semua ({done})</span>
+                  </>
+                )}
+              </button>
+            )}
+
             {queued > 0 && (
               <button className="btn-ghost text-xs" onClick={() => act(() => api.pauseAudio(id))}>
                 <Pause size={14} className="text-amber-400" /> Jeda ({queued} antre)
@@ -268,17 +502,88 @@ export default function AudioView({ project, setProject }) {
             </button>
           </div>
         </div>
+
+        {/* Play All Controller Strip (muncul saat Play All aktif) */}
+        {playingAll && currentPlayingIndex !== null && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-xs text-amber-200 shadow-inner">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <Volume2 size={16} className={`text-amber-400 shrink-0 ${isPlaying ? "animate-pulse" : "opacity-60"}`} />
+              <span className="font-mono font-bold text-amber-300 shrink-0">
+                Scene #{currentPlayingIndex + 1}
+              </span>
+              <span className="text-slate-300 truncate text-xs hidden sm:inline max-w-sm lg:max-w-md">
+                "{scenes[currentPlayingIndex]?.narration}"
+              </span>
+              <span className="font-mono text-[11px] text-amber-300/90 shrink-0 bg-amber-500/15 px-2 py-0.5 rounded border border-amber-500/25 ml-auto sm:ml-0">
+                {fmtTime(playCurrentTime)} / {fmtTime(playDuration || scenes[currentPlayingIndex]?.audio_duration || 0)}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                className="btn-ghost p-1.5 text-slate-300 hover:text-white disabled:opacity-30"
+                onClick={playPrevScene}
+                disabled={findPrevPlayable(currentPlayingIndex) === -1}
+                title="Scene sebelumnya"
+              >
+                <SkipBack size={13} />
+              </button>
+              <button
+                className="btn-primary px-3 py-1 text-slate-950 font-bold flex items-center gap-1 text-[11px]"
+                onClick={togglePlayPause}
+                title={isPlaying ? "Jeda" : "Lanjutkan"}
+              >
+                {isPlaying ? (
+                  <>
+                    <Pause size={12} className="fill-current" />
+                    <span>Jeda</span>
+                  </>
+                ) : (
+                  <>
+                    <Play size={12} className="fill-current" />
+                    <span>Putar</span>
+                  </>
+                )}
+              </button>
+              <button
+                className="btn-ghost p-1.5 text-slate-300 hover:text-white disabled:opacity-30"
+                onClick={playNextScene}
+                disabled={findNextPlayable(currentPlayingIndex + 1) === -1}
+                title="Scene berikutnya"
+              >
+                <SkipForward size={13} />
+              </button>
+              <button
+                className="btn-ghost px-2 py-1 text-red-300 hover:text-red-200 hover:bg-red-500/20 border-red-500/30 flex items-center gap-1 text-[11px]"
+                onClick={stopPlayAll}
+                title="Hentikan putar semua audio"
+              >
+                <Square size={10} className="fill-current" />
+                <span>Stop</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* DAFTAR SCENE */}
       <ul className="space-y-2">
         {scenes.map((s, i) => {
           const [label, tone] = STATUS[s.audio_stale ? "stale" : s.audio_status] ?? STATUS.pending;
+          const isCurrentPlayAll = currentPlayingIndex === i && playingAll;
+
           return (
             <li
               key={i}
               id={`audio-scene-${i}`}
-              className={`card flex scroll-mt-24 flex-col gap-3 p-3 sm:flex-row sm:items-center ${
-                failedNav.flash === i ? "ring-2 ring-red-400 ring-offset-2 ring-offset-[#0f1117]" : s.audio_status === "failed" ? "border-red-500/40" : ""
+              className={`card flex scroll-mt-72 flex-col gap-3 p-3 sm:flex-row sm:items-center transition-all duration-200 ${
+                isCurrentPlayAll
+                  ? "ring-2 ring-amber-400 border-amber-500/70 bg-amber-500/10 shadow-lg shadow-amber-500/10"
+                  : failedNav.flash === i
+                  ? "ring-2 ring-red-400 ring-offset-2 ring-offset-[#0f1117]"
+                  : s.audio_status === "failed"
+                  ? "border-red-500/40"
+                  : ""
               }`}
             >
               <div className="flex items-start gap-3 sm:w-[55%]">
@@ -286,22 +591,69 @@ export default function AudioView({ project, setProject }) {
                   {s.image_file && <img src={api.fileUrl(id, s.image_file, project.updated_at)} alt="" className="h-full w-full object-cover" loading="lazy" />}
                 </div>
                 <div className="min-w-0 flex-1 space-y-1">
-                  <span className="font-mono text-xs font-bold text-slate-400">#{i + 1}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-400">#{i + 1}</span>
+                    {s.audio_file && s.audio_status === "done" && (
+                      <button
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 transition ${
+                          isCurrentPlayAll && isPlaying
+                            ? "bg-amber-400 text-slate-950 font-bold"
+                            : "bg-[#292e3b]/60 text-slate-300 hover:bg-amber-500/20 hover:text-amber-300"
+                        }`}
+                        onClick={() => {
+                          if (isCurrentPlayAll) {
+                            togglePlayPause();
+                          } else {
+                            startPlayAll(i);
+                          }
+                        }}
+                        title="Putar audio mulai dari scene ini"
+                      >
+                        {isCurrentPlayAll && isPlaying ? (
+                          <>
+                            <Pause size={10} className="fill-current" />
+                            <span>Jeda</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play size={10} className="fill-current" />
+                            <span>Putar dari sini</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
                   <NarrationText scene={s} onSave={async (text) => setProject(await api.setNarration(id, i, text))} />
                 </div>
               </div>
+
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                 {s.audio_file && s.audio_status === "done" ? (
                   <>
-                    <audio controls preload="none" src={api.audioUrl(id, s.audio_file, s.audio_key)} className="h-8 min-w-0 flex-1" />
+                    <audio
+                      controls
+                      preload="none"
+                      src={api.audioUrl(id, s.audio_file, s.audio_key)}
+                      className="h-8 min-w-0 flex-1"
+                      onPlay={() => {
+                        if (playingAll) stopPlayAll();
+                      }}
+                    />
                     <span className="font-mono text-[11px] text-slate-400">{fmtSec(s.audio_duration ?? 0)}</span>
                   </>
                 ) : (
                   <span className="flex-1 text-xs text-red-300">{s.audio_error}</span>
                 )}
-                <span className={`rounded-md border px-2 py-0.5 font-mono text-[10px] tracking-wider uppercase font-semibold ${tone}`}>
-                  {label}
-                </span>
+
+                {isCurrentPlayAll ? (
+                  <span className="rounded-md border border-amber-400/50 bg-amber-400/20 px-2 py-0.5 font-mono text-[10px] text-amber-300 font-bold tracking-wider uppercase animate-pulse flex items-center gap-1">
+                    <Volume2 size={11} /> SEDANG DIPUTAR
+                  </span>
+                ) : (
+                  <span className={`rounded-md border px-2 py-0.5 font-mono text-[10px] tracking-wider uppercase font-semibold ${tone}`}>
+                    {label}
+                  </span>
+                )}
 
                 {s.audio_status === "generating" ? (
                   <button
@@ -344,6 +696,21 @@ export default function AudioView({ project, setProject }) {
           );
         })}
       </ul>
+
+      {/* FLOATING SCROLL TO TOP BUTTON DI KANAN BAWAH */}
+      <button
+        onClick={scrollToTop}
+        className={`fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full border border-amber-500/40 bg-[#161920]/95 px-4 py-2.5 font-semibold text-xs text-amber-300 shadow-2xl backdrop-blur-md transition-all duration-300 hover:bg-amber-500 hover:text-slate-950 hover:border-amber-400 hover:scale-105 active:scale-95 ${
+          showScrollTop
+            ? "translate-y-0 opacity-100 pointer-events-auto shadow-amber-500/20"
+            : "translate-y-4 opacity-0 pointer-events-none"
+        }`}
+        title="Kembali ke atas halaman"
+        aria-label="Scroll ke atas"
+      >
+        <ChevronUp size={16} strokeWidth={2.5} />
+        <span>Ke Atas</span>
+      </button>
 
       <FailedNav nav={failedNav} noun="audio" />
       <VoiceLibrary
