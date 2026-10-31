@@ -68,17 +68,47 @@ def run_job(client: Client, job: dict, device: str) -> None:
         waves = [engine.generate(p, job["seed"], job["params"], job["lang"]) for p in pieces]
         wave = trim_silence(concat(waves, engine.sr), engine.sr)
 
+        import audit as tts_audit
+        model_whisper = None
+        try:
+            from splitter import get_whisper
+            model_whisper = get_whisper()
+        except Exception:
+            pass
+
         if len(scene_indices) > 1:
             from splitter import align_and_slice
             slices = align_and_slice(wave, engine.sr, scene_texts, job.get("lang", "id"))
-            for s_idx, s_key, s_wave in zip(scene_indices, scene_keys, slices):
-                # Slices already have micro-fades from align_and_slice; do not trim_silence to avoid clipping phonemes
-                client.put_result(job["project_id"], s_idx, s_key, to_wav_bytes(s_wave, engine.sr))
-            # Also upload the full uncut master audio for the whole sentence group
+            for s_idx, s_key, s_text, s_wave in zip(scene_indices, scene_keys, scene_texts, slices):
+                audit_res = None
+                if model_whisper:
+                    try:
+                        import io, soundfile as sf
+                        buf = io.BytesIO()
+                        sf.write(buf, s_wave, engine.sr, format="WAV")
+                        buf.seek(0)
+                        segs, _ = model_whisper.transcribe(buf, language=job.get("lang", "id"))
+                        tr = " ".join(s.text for s in segs).strip()
+                        audit_res = tts_audit.audit_transcription(s_text, tr)
+                    except Exception:
+                        pass
+                client.put_result(job["project_id"], s_idx, s_key, to_wav_bytes(s_wave, engine.sr), audit=audit_res)
             client.put_group_result(job["project_id"], scene_indices[0], job["key"], to_wav_bytes(wave, engine.sr))
             log(f"{label} {job['model']} Group of {len(scene_indices)} scenes ({len(wave) / engine.sr:.1f}s total) in {time.perf_counter() - t0:.1f}s ({device})")
         else:
-            client.put_result(job["project_id"], scene_indices[0], scene_keys[0], to_wav_bytes(wave, engine.sr))
+            audit_res = None
+            if model_whisper:
+                try:
+                    import io, soundfile as sf
+                    buf = io.BytesIO()
+                    sf.write(buf, wave, engine.sr, format="WAV")
+                    buf.seek(0)
+                    segs, _ = model_whisper.transcribe(buf, language=job.get("lang", "id"))
+                    tr = " ".join(s.text for s in segs).strip()
+                    audit_res = tts_audit.audit_transcription(scene_texts[0], tr)
+                except Exception:
+                    pass
+            client.put_result(job["project_id"], scene_indices[0], scene_keys[0], to_wav_bytes(wave, engine.sr), audit=audit_res)
             log(f"{label} {job['model']} {len(wave) / engine.sr:.1f}s audio in {time.perf_counter() - t0:.1f}s ({device})")
     finally:
         free_memory(device)

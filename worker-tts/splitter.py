@@ -6,6 +6,7 @@ cleanly at scene boundaries using word timestamps, energy-minimum search, and mi
 
 import difflib
 import io
+import os
 import re
 import wave
 from pathlib import Path
@@ -27,7 +28,8 @@ def get_whisper():
         import faster_whisper
         device = "cuda" if torch.cuda.is_available() else "cpu"
         compute_type = "float16" if device == "cuda" else "int8"
-        _whisper_instance = faster_whisper.WhisperModel("base", device=device, compute_type=compute_type)
+        model_name = os.environ.get("WHISPER_MODEL", "large-v3-turbo")
+        _whisper_instance = faster_whisper.WhisperModel(model_name, device=device, compute_type=compute_type)
     return _whisper_instance
 
 

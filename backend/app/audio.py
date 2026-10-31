@@ -295,7 +295,7 @@ def save_group_result(project_id: str, index: int, name: str, key: str, data: by
         return p
 
 
-def save_result(project_id: str, index: int, name: str, key: str, data: bytes) -> Project:
+def save_result(project_id: str, index: int, name: str, key: str, data: bytes, audit_data: dict | None = None) -> Project:
     if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
         raise ValueError("not a WAV file")
     try:
@@ -322,6 +322,11 @@ def save_result(project_id: str, index: int, name: str, key: str, data: bytes) -
         s = p.scenes[index]
         s.audio_status, s.audio_file, s.audio_duration = "done", f"audio/{name_}", duration
         s.audio_key, s.audio_error = key, None
+        if audit_data:
+            s.audio_audit_score = audit_data.get("score")
+            s.audio_audit_status = audit_data.get("status")
+            s.audio_audit_text = audit_data.get("transcribed")
+            s.audio_audit_issues = audit_data.get("issues", [])
         storage.save(p)
         return p
 

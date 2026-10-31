@@ -133,6 +133,25 @@ def cancel_audio(project_id: str, body: AudioCancelIn | None = None):
     return project_out(_errors(audio.cancel, project_id, indices))
 
 
+@router.post("/api/projects/{project_id}/audio/audit")
+def audit_project_audio(project_id: str):
+    import subprocess, sys
+    from pathlib import Path
+    py_path = Path("worker-tts/.venv-ml/Scripts/python.exe")
+    if not py_path.exists():
+        py_path = Path("worker-tts/.venv-ml/bin/python")
+    py_cmd = str(py_path.resolve()) if py_path.exists() else sys.executable
+    cmd = [py_cmd, "worker-tts/audit_cli.py", project_id]
+    try:
+        subprocess.run(cmd, check=True, timeout=120)
+    except Exception as e:
+        raise HTTPException(500, f"Audit gagal: {e}")
+    p = storage.load(project_id)
+    if not p:
+        raise HTTPException(404, "Project tidak ditemukan")
+    return project_out(p)
+
+
 @router.get("/api/tts/status")
 def tts_status():
     audio.reap()
@@ -200,11 +219,19 @@ def worker_voice_audio(voice_id: str):
 
 
 @router.put(f"{WORKER_PREFIX}/jobs/{{project_id}}/{{index}}/result", status_code=204, dependencies=[Depends(require_worker)])
-async def worker_result(project_id: str, index: int, key: str, request: Request, is_group: bool = False, x_worker_name: str = Header()):
+async def worker_result(project_id: str, index: int, key: str, request: Request, is_group: bool = False, x_worker_name: str = Header(), x_worker_audit: str | None = Header(None)):
+    audit_data = None
+    if x_worker_audit:
+        try:
+            import json, base64
+            audit_json = base64.b64decode(x_worker_audit).decode('utf-8')
+            audit_data = json.loads(audit_json)
+        except Exception:
+            pass
     if is_group:
         _errors(audio.save_group_result, project_id, index, x_worker_name, key, await request.body())
     else:
-        _errors(audio.save_result, project_id, index, x_worker_name, key, await request.body())
+        _errors(audio.save_result, project_id, index, x_worker_name, key, await request.body(), audit_data)
 
 
 @router.post(f"{WORKER_PREFIX}/jobs/{{project_id}}/{{index}}/fail", status_code=204, dependencies=[Depends(require_worker)])

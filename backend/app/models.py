@@ -40,6 +40,11 @@ class Scene(BaseModel):
     audio_key: str | None = None  # narration+voice+model the clip was made from (detects stale audio)
     audio_started_at: str | None = None
     audio_worker: str | None = None
+    # audio audit (Whisper consistency verification)
+    audio_audit_score: float | None = None
+    audio_audit_status: str | None = None
+    audio_audit_text: str | None = None
+    audio_audit_issues: list[str] = Field(default_factory=list)
     # sound effect on the CapCut timeline, played at the start or end of the scene
     sfx_id: str | None = None
     sfx_pos: SfxPos = "start"
