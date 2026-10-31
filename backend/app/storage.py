@@ -1,3 +1,5 @@
+import concurrent.futures
+import logging
 import re
 import shutil
 import threading
@@ -7,7 +9,9 @@ from pathlib import Path
 from . import config, d1, db, r2
 from .models import Project, now_iso
 
+logger = logging.getLogger("storage")
 lock = threading.RLock()
+_cloud_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="cloud_sync")
 
 
 def slugify(text: str) -> str:
@@ -23,6 +27,36 @@ def project_dir(project_id: str) -> Path:
     if not re.fullmatch(r"[a-z0-9-]+", project_id):
         raise ValueError("invalid project id")
     return config.OUTPUT_DIR / project_id
+
+
+def _sync_to_cloud_bg(project: Project, project_file: Path) -> None:
+    """Sync project to Cloudflare D1 and R2 in the background."""
+    if config.has_d1():
+        try:
+            d1.save_project(project)
+        except Exception as e:
+            logger.error(f"Failed to sync project to D1: {e}")
+
+    if config.has_r2() and project_file.exists():
+        try:
+            r2.upload_file(project_file, f"projects/{project.id}/project.json", "application/json")
+        except Exception as e:
+            logger.error(f"Failed to sync project metadata to R2: {e}")
+
+
+def _delete_from_cloud_bg(project_id: str) -> None:
+    """Delete project from Cloudflare D1 and R2 in the background."""
+    if config.has_d1():
+        try:
+            d1.delete_project(project_id)
+        except Exception as e:
+            logger.error(f"Failed to delete project from D1: {e}")
+
+    if config.has_r2():
+        try:
+            r2.delete_prefix(f"projects/{project_id}/")
+        except Exception as e:
+            logger.error(f"Failed to delete assets from R2: {e}")
 
 
 def save(project: Project) -> None:
@@ -41,20 +75,9 @@ def save(project: Project) -> None:
         except Exception:
             pass
 
-        # 2. Sync to Cloudflare D1
-        if config.has_d1():
-            try:
-                d1.save_project(project)
-            except Exception as e:
-                import logging
-                logging.getLogger("storage").error(f"Failed to sync project to D1: {e}")
-
-        # 3. Sync project metadata to Cloudflare R2
-        if config.has_r2():
-            try:
-                r2.upload_file(project_file, f"projects/{project.id}/project.json", "application/json")
-            except Exception:
-                pass
+    # 2. Async sync to Cloudflare D1 and R2 without blocking the main event loop
+    if config.has_d1() or config.has_r2():
+        _cloud_executor.submit(_sync_to_cloud_bg, project, project_file)
 
 
 def load(project_id: str) -> Project | None:
@@ -62,30 +85,25 @@ def load(project_id: str) -> Project | None:
         d = project_dir(project_id)
         f = d / "project.json"
 
-        local_proj = None
+        # 1. Local disk adalah primary fast cache (0.05 ms)
         if f.exists():
             try:
-                local_proj = Project.model_validate_json(f.read_text(encoding="utf-8"))
+                return Project.model_validate_json(f.read_text(encoding="utf-8"))
             except Exception:
                 pass
 
-        # 1. Jika terhubung Cloudflare D1, sinkronkan dengan versi cloud terbaru
+        # 2. Fallback: jika belum ada di lokal, coba unduh dari Cloudflare D1
         if config.has_d1():
             try:
                 remote_proj = d1.load_project(project_id)
                 if remote_proj:
-                    if local_proj is None or (remote_proj.updated_at or "") > (local_proj.updated_at or ""):
-                        d.mkdir(parents=True, exist_ok=True)
-                        f.write_text(remote_proj.model_dump_json(indent=2), encoding="utf-8")
-                        return remote_proj
-                    return local_proj
-            except Exception:
-                pass
+                    d.mkdir(parents=True, exist_ok=True)
+                    f.write_text(remote_proj.model_dump_json(indent=2), encoding="utf-8")
+                    return remote_proj
+            except Exception as e:
+                logger.error(f"Failed to load from D1: {e}")
 
-        if local_proj:
-            return local_proj
-
-        # 2. Fallback: coba unduh dari R2
+        # 3. Fallback: coba unduh dari Cloudflare R2
         if config.has_r2():
             try:
                 if r2.download_file(f"projects/{project_id}/project.json", f):
@@ -98,68 +116,53 @@ def load(project_id: str) -> Project | None:
 
 def list_all() -> list[Project]:
     with lock:
-        # 1. Jika terhubung D1, gunakan D1 sebagai single source of truth lintas device
+        # 1. Ambil dari folder lokal (cepat ~15 ms, tanpa latency jaringan)
+        projects = []
+        if config.OUTPUT_DIR.exists():
+            for f in config.OUTPUT_DIR.glob("*/project.json"):
+                try:
+                    projects.append(Project.model_validate_json(f.read_text(encoding="utf-8")))
+                except Exception:
+                    pass
+
+        if projects:
+            return sorted(projects, key=lambda p: p.created_at, reverse=True)
+
+        # 2. Fallback hanya jika lokal benar-benar kosong dan D1 terhubung
         if config.has_d1():
             try:
-                projects = d1.list_projects()
-                if projects:
-                    # Sync local directory cache
-                    for p in projects:
+                cloud_projects = d1.list_projects()
+                if cloud_projects:
+                    for p in cloud_projects:
                         d = project_dir(p.id)
                         d.mkdir(parents=True, exist_ok=True)
                         pf = d / "project.json"
                         if not pf.exists():
                             pf.write_text(p.model_dump_json(indent=2), encoding="utf-8")
-                        else:
-                            try:
-                                local_p = Project.model_validate_json(pf.read_text(encoding="utf-8"))
-                                if (p.updated_at or "") > (local_p.updated_at or ""):
-                                    pf.write_text(p.model_dump_json(indent=2), encoding="utf-8")
-                            except Exception:
-                                pass
-                    return projects
+                    return sorted(cloud_projects, key=lambda p: p.created_at, reverse=True)
             except Exception as e:
-                import logging
-                logging.getLogger("storage").error(f"Failed to list from D1: {e}")
+                logger.error(f"Failed to list from D1: {e}")
 
-        # 2. Fallback ke folder lokal jika D1 belum dikonfigurasi / offline
-        if not config.OUTPUT_DIR.exists():
-            return []
-        projects = []
-        for f in config.OUTPUT_DIR.glob("*/project.json"):
-            try:
-                projects.append(Project.model_validate_json(f.read_text(encoding="utf-8")))
-            except Exception:
-                pass
-        return sorted(projects, key=lambda p: p.created_at, reverse=True)
+        return []
 
 
 def delete(project_id: str) -> None:
     with lock:
-        # 1. Hapus dari D1
-        if config.has_d1():
-            try:
-                d1.delete_project(project_id)
-            except Exception:
-                pass
-
-        # 2. Hapus aset media di Cloudflare R2
-        if config.has_r2():
-            try:
-                r2.delete_prefix(f"projects/{project_id}/")
-            except Exception:
-                pass
-
-        # 3. Hapus dari SQLite lokal
+        # 1. Hapus dari SQLite lokal
         try:
             db.delete_project_record(project_id)
         except Exception:
             pass
 
-        # 4. Hapus folder lokal
+        # 2. Hapus folder lokal
         d = project_dir(project_id)
         if d.exists():
             shutil.rmtree(d, ignore_errors=True)
         dl_dir = config.DOWNLOADS_DIR / "stickman-flow" / project_id
         if dl_dir.exists():
             shutil.rmtree(dl_dir, ignore_errors=True)
+
+    # 3. Async hapus dari D1 dan R2
+    if config.has_d1() or config.has_r2():
+        _cloud_executor.submit(_delete_from_cloud_bg, project_id)
+
