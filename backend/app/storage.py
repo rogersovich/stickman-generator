@@ -62,26 +62,30 @@ def load(project_id: str) -> Project | None:
         d = project_dir(project_id)
         f = d / "project.json"
 
-        # 1. Coba baca dari file lokal
+        local_proj = None
         if f.exists():
             try:
-                return Project.model_validate_json(f.read_text(encoding="utf-8"))
+                local_proj = Project.model_validate_json(f.read_text(encoding="utf-8"))
             except Exception:
                 pass
 
-        # 2. Jika tidak ada di lokal (misal baru buka di device lain), ambil dari Cloudflare D1
+        # 1. Jika terhubung Cloudflare D1, sinkronkan dengan versi cloud terbaru
         if config.has_d1():
             try:
-                proj = d1.load_project(project_id)
-                if proj:
-                    # Simpan ke cache lokal
-                    d.mkdir(parents=True, exist_ok=True)
-                    f.write_text(proj.model_dump_json(indent=2), encoding="utf-8")
-                    return proj
+                remote_proj = d1.load_project(project_id)
+                if remote_proj:
+                    if local_proj is None or (remote_proj.updated_at or "") > (local_proj.updated_at or ""):
+                        d.mkdir(parents=True, exist_ok=True)
+                        f.write_text(remote_proj.model_dump_json(indent=2), encoding="utf-8")
+                        return remote_proj
+                    return local_proj
             except Exception:
                 pass
 
-        # 3. Fallback: coba unduh dari R2
+        if local_proj:
+            return local_proj
+
+        # 2. Fallback: coba unduh dari R2
         if config.has_r2():
             try:
                 if r2.download_file(f"projects/{project_id}/project.json", f):
@@ -106,6 +110,13 @@ def list_all() -> list[Project]:
                         pf = d / "project.json"
                         if not pf.exists():
                             pf.write_text(p.model_dump_json(indent=2), encoding="utf-8")
+                        else:
+                            try:
+                                local_p = Project.model_validate_json(pf.read_text(encoding="utf-8"))
+                                if (p.updated_at or "") > (local_p.updated_at or ""):
+                                    pf.write_text(p.model_dump_json(indent=2), encoding="utf-8")
+                            except Exception:
+                                pass
                     return projects
             except Exception as e:
                 import logging

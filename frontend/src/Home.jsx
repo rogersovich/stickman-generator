@@ -36,9 +36,15 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
   const [projects, setProjects] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
 
   useEffect(() => {
-    api.projects().then(setProjects).catch(() => {});
+    setLoadingProjects(true);
+    api
+      .projects()
+      .then(setProjects)
+      .catch(() => {})
+      .finally(() => setLoadingProjects(false));
   }, []);
 
   // When markdownText changes, run parse preview
@@ -357,10 +363,40 @@ export default function Home() {
             <Film size={14} className="text-amber-400" />
             Project Tersimpan
           </h2>
-          <span className="font-mono text-xs text-slate-400">{projects.length} reel</span>
+          <span className="font-mono text-xs text-slate-400">
+            {loadingProjects ? (
+              <span className="inline-flex items-center gap-1 text-slate-400">
+                <Loader2 size={12} className="animate-spin text-amber-400" /> memuat…
+              </span>
+            ) : (
+              `${projects.length} reel`
+            )}
+          </span>
         </div>
 
-        {projects.length === 0 ? (
+        {loadingProjects ? (
+          <div className="space-y-2.5 animate-pulse">
+            <div className="rounded-xl border border-[#292e3b] bg-[#1e222b]/60 p-4 space-y-2.5">
+              <div className="h-4 w-3/4 rounded bg-slate-700/50" />
+              <div className="flex gap-2">
+                <div className="h-3.5 w-12 rounded bg-slate-800" />
+                <div className="h-3.5 w-16 rounded bg-slate-800" />
+                <div className="h-3.5 w-20 rounded bg-slate-800" />
+              </div>
+            </div>
+            <div className="rounded-xl border border-[#292e3b] bg-[#1e222b]/40 p-4 space-y-2.5">
+              <div className="h-4 w-1/2 rounded bg-slate-700/40" />
+              <div className="flex gap-2">
+                <div className="h-3.5 w-12 rounded bg-slate-800" />
+                <div className="h-3.5 w-16 rounded bg-slate-800" />
+              </div>
+            </div>
+            <div className="flex items-center justify-center gap-2 py-2 text-xs text-slate-400 font-mono">
+              <Loader2 size={13} className="animate-spin text-amber-400" />
+              <span>Memuat project tersimpan…</span>
+            </div>
+          </div>
+        ) : projects.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[#292e3b] p-6 text-center text-sm text-slate-400">
             Belum ada project tersimpan. Import file markdown prompt di samping untuk memulai.
           </div>

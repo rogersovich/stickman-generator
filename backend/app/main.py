@@ -441,16 +441,22 @@ def download(project_id: str):
 
         # Write each scene image sequentially so merged scenes also have a corresponding image file in the zip
         for i, s in enumerate(p.scenes):
-            if s.image_file and (d / s.image_file).exists():
+            if s.image_file:
                 src_path = d / s.image_file
-                out_name = f"scene_{i + 1:03d}{src_path.suffix}"
-                z.write(src_path, out_name)
-            if s.audio_file and (d / s.audio_file).exists():
+                if not src_path.exists() and config.has_r2():
+                    r2.download_file(f"projects/{project_id}/{s.image_file}", src_path)
+                if src_path.exists():
+                    out_name = f"scene_{i + 1:03d}{src_path.suffix}"
+                    z.write(src_path, out_name)
+            if s.audio_file:
                 src_audio = d / s.audio_file
-                out_name = f"scene_{i + 1:03d}.wav"
-                z.write(src_audio, out_name)
-                if s.audio_file != out_name:
-                    z.write(src_audio, s.audio_file)
+                if not src_audio.exists() and config.has_r2():
+                    r2.download_file(f"projects/{project_id}/{s.audio_file}", src_audio)
+                if src_audio.exists():
+                    out_name = f"scene_{i + 1:03d}.wav"
+                    z.write(src_audio, out_name)
+                    if s.audio_file != out_name:
+                        z.write(src_audio, s.audio_file)
 
     buf.seek(0)
     return StreamingResponse(
