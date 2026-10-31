@@ -3,6 +3,7 @@ import {
   AudioLines,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronUp,
   Library,
   Loader2,
@@ -96,7 +97,7 @@ function NarrationText({ scene, onSave }) {
   );
 }
 
-function AuditModal({ data, onClose, onRegenerate }) {
+function AuditModal({ data, onClose, onRegenerate, onApprove }) {
   if (!data) return null;
   const { scene, index, isGrouped, groupScenes } = data;
   const score = Math.round((scene.audio_audit_score ?? 0) * 100);
@@ -123,7 +124,7 @@ function AuditModal({ data, onClose, onRegenerate }) {
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition cursor-pointer"
             title="Tutup"
           >
             <X size={18} />
@@ -168,29 +169,88 @@ function AuditModal({ data, onClose, onRegenerate }) {
           )}
 
           <div className="text-[11px] text-slate-400 leading-normal bg-slate-800/40 p-2.5 rounded border border-slate-800/70">
-            💡 <span className="font-semibold text-slate-300">Kenapa ini terjadi?</span> Model suara TTS terkadang berbicara terlalu cepat, menyatukan dua kata, atau menelan suku kata di akhir kata. Jika suara di scene ini terdengar janggal, klik tombol <b className="text-emerald-400">Generate Ulang</b> di bawah untuk mengambil take suara baru.
+            💡 <span className="font-semibold text-slate-300">Tips:</span> Terkadang AI Whisper salah dengar atau terlalu sensitif pada kata-kata tertentu. Jika setelah kamu dengarkan suaranya sudah baik dan jelas, klik tombol <b className="text-emerald-400">Suara Sudah Benar</b> untuk mengabaikan peringatan ini.
           </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-3">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition"
-          >
-            Tutup
-          </button>
-          <button
-            onClick={() => {
-              onClose();
-              onRegenerate(data);
-            }}
-            className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-bold text-white flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition"
-          >
-            <RotateCcw size={13} />
-            <span>{isGrouped ? `Generate Ulang Grup #${(scene.sentence_group ?? 0) + 1}` : "Generate Ulang Scene Ini"}</span>
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3">
+          <div>
+            {isWarning && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onApprove(isGrouped && groupScenes?.length ? groupScenes : [index]);
+                }}
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-300 flex items-center gap-1.5 transition cursor-pointer"
+                title="Tandai audio ini sudah bagus dan abaikan peringatan Whisper"
+              >
+                <Check size={14} />
+                <span>Suara Sudah Benar (Abaikan)</span>
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition cursor-pointer"
+            >
+              Tutup
+            </button>
+            <button
+              onClick={() => {
+                onClose();
+                onRegenerate(data);
+              }}
+              className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-bold text-white flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition cursor-pointer"
+            >
+              <RotateCcw size={13} />
+              <span>{isGrouped ? `Generate Ulang Grup #${(scene.sentence_group ?? 0) + 1}` : "Generate Ulang Scene Ini"}</span>
+            </button>
+          </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Floating navigation pill to jump across audit warnings
+function AuditNav({ nav, hasFailed }) {
+  const { indexes, cursor, goTo } = nav;
+  if (!indexes.length) return null;
+  return (
+    <div
+      className={`fixed ${
+        hasFailed ? "bottom-16" : "bottom-5"
+      } left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/40 bg-[#161922]/95 p-1 pl-3.5 text-xs text-amber-300 shadow-xl shadow-amber-950/40 backdrop-blur-md transition-all duration-200`}
+    >
+      <button
+        className="flex items-center gap-1.5 font-mono hover:text-amber-200 cursor-pointer font-semibold"
+        onClick={() => goTo(cursor < 0 ? 1 : 0)}
+        title="Lompat ke scene dengan catatan pelafalan"
+      >
+        <AlertTriangle size={13} className="text-amber-400" />
+        <span>Peringatan {cursor < 0 ? "–" : cursor + 1}/{indexes.length}</span>
+        {cursor >= 0 && <span className="text-amber-400/80 font-bold">· #{indexes[cursor] + 1}</span>}
+      </button>
+      <div className="flex items-center gap-0.5 ml-1 border-l border-amber-500/30 pl-1">
+        <button
+          className="rounded-full p-1.5 hover:bg-amber-500/20 text-amber-300 hover:text-amber-100 transition cursor-pointer"
+          onClick={() => goTo(-1)}
+          title="Peringatan pelafalan sebelumnya"
+          aria-label="Peringatan pelafalan sebelumnya"
+        >
+          <ChevronUp size={15} />
+        </button>
+        <button
+          className="rounded-full p-1.5 hover:bg-amber-500/20 text-amber-300 hover:text-amber-100 transition cursor-pointer"
+          onClick={() => goTo(1)}
+          title="Peringatan pelafalan berikutnya"
+          aria-label="Peringatan pelafalan berikutnya"
+        >
+          <ChevronDown size={15} />
+        </button>
       </div>
     </div>
   );
@@ -228,10 +288,21 @@ export default function AudioView({ project, setProject }) {
     try {
       const updated = await api.auditAudio(id);
       setProject(updated);
-      dialog.alert({
-        title: "Audit Pelafalan Selesai",
-        message: "Pemeriksaan konsistensi audio telah selesai. Scene yang memiliki catatan pelafalan ditandai dengan badge kuning 'Cek Pelafalan'.",
-      });
+      const warnings = (updated.scenes || [])
+        .map((s, idx) => (s.audio_audit_status === "warning" ? idx : -1))
+        .filter((idx) => idx >= 0);
+      if (warnings.length > 0) {
+        setTimeout(() => auditNav.goTo(1), 300);
+        dialog.alert({
+          title: "Audit Pelafalan Selesai",
+          message: `Ditemukan ${warnings.length} scene dengan catatan pelafalan. Layar otomatis diarahkan ke scene pertama. Gunakan tombol navigasi panah untuk berpindah antar scene.`,
+        });
+      } else {
+        dialog.alert({
+          title: "Audit Pelafalan Selesai",
+          message: "Semua pelafalan audio sesuai dengan naskah (100% Akurat)!",
+        });
+      }
     } catch (err) {
       dialog.alert({
         title: "Gagal Audit",
@@ -311,6 +382,17 @@ export default function AudioView({ project, setProject }) {
     scenes.flatMap((s, i) => (s.audio_status === "failed" ? [i] : [])),
     "audio-scene-"
   );
+  const auditWarningIndices = scenes.flatMap((s, i) => (s.audio_audit_status === "warning" ? [i] : []));
+  const auditNav = useFailedNav(auditWarningIndices, "audio-scene-");
+
+  const handleApproveAudio = async (indices) => {
+    try {
+      const updated = await api.approveAudioAudit(id, indices);
+      setProject(updated);
+    } catch (e) {
+      await dialog.alert({ title: "Gagal Menandai Audio", message: e.message });
+    }
+  };
 
   useEffect(() => {
     api.voices().then(setVoices).catch(() => {});
@@ -359,8 +441,10 @@ export default function AudioView({ project, setProject }) {
   async function regenerateAll() {
     const ok = await dialog.confirm({
       title: "Ulang semua audio?",
-      message: `Semua ${scenes.length} scene akan digenerate ulang, termasuk yang sudah selesai. Bisa makan waktu lama.`,
+      message: `Semua ${scenes.length} scene akan digenerate ulang dan audio lama akan ditimpa. Proses ini memerlukan waktu beberapa menit. Apakah kamu yakin?`,
       confirmLabel: "Ya, Ulang Semua",
+      cancelLabel: "Batal",
+      danger: true,
     });
     if (ok) act(() => api.generateAudio(id, { mode: "all" }));
   }
@@ -435,9 +519,10 @@ export default function AudioView({ project, setProject }) {
 
     const a = playAllAudioRef.current;
     const isGroupedPlay = (s.sentence_group_size ?? 1) > 1;
+    const cacheTag = `${s.audio_key || ""}_${project.updated_at || ""}`;
     const audioSrc = isGroupedPlay && s.sentence_group_audio
-      ? api.audioUrl(id, s.sentence_group_audio, s.audio_key)
-      : api.audioUrl(id, s.audio_file, s.audio_key);
+      ? api.audioUrl(id, s.sentence_group_audio, cacheTag)
+      : api.audioUrl(id, s.audio_file, cacheTag);
     a.src = audioSrc;
     a.currentTime = 0;
 
@@ -630,24 +715,59 @@ export default function AudioView({ project, setProject }) {
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {/* Tombol Audit Pelafalan */}
             {done > 0 && (
-              <button
-                className="btn-ghost text-xs flex items-center gap-1.5 text-slate-300 hover:text-white border border-[#292e3b] px-2.5 py-1.5 rounded-md"
-                onClick={runAudit}
-                disabled={auditing}
-                title="Audit konsistensi teks dan pelafalan seluruh audio menggunakan Whisper"
-              >
-                {auditing ? (
-                  <>
-                    <Loader2 size={13} className="animate-spin text-amber-400" />
-                    <span>Mengaudit...</span>
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck size={14} className="text-emerald-400" />
-                    <span>Audit Pelafalan</span>
-                  </>
+              <div className="flex items-center gap-1.5">
+                <button
+                  className="btn-ghost text-xs flex items-center gap-1.5 text-slate-300 hover:text-white border border-[#292e3b] px-2.5 py-1.5 rounded-md"
+                  onClick={runAudit}
+                  disabled={auditing}
+                  title="Audit konsistensi teks dan pelafalan seluruh audio menggunakan Whisper"
+                >
+                  {auditing ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin text-amber-400" />
+                      <span>Mengaudit...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={14} className="text-emerald-400" />
+                      <span>Audit Pelafalan</span>
+                    </>
+                  )}
+                </button>
+
+                {auditWarningIndices.length > 0 && (
+                  <div className="flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-300 font-mono">
+                    <button
+                      type="button"
+                      onClick={() => auditNav.goTo(auditNav.cursor < 0 ? 1 : 0)}
+                      className="font-semibold flex items-center gap-1 cursor-pointer hover:underline text-amber-300"
+                      title="Klik untuk lompat ke scene yang perlu dicek"
+                    >
+                      <AlertTriangle size={12} className="text-amber-400" />
+                      <span>{auditWarningIndices.length} Peringatan</span>
+                    </button>
+                    <span className="text-slate-600">|</span>
+                    <button
+                      type="button"
+                      onClick={() => auditNav.goTo(-1)}
+                      className="p-0.5 hover:bg-amber-500/20 rounded transition text-amber-300 hover:text-amber-100 cursor-pointer"
+                      title="Peringatan pelafalan sebelumnya"
+                      aria-label="Peringatan pelafalan sebelumnya"
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => auditNav.goTo(1)}
+                      className="p-0.5 hover:bg-amber-500/20 text-amber-300 hover:text-amber-100 rounded transition cursor-pointer"
+                      title="Peringatan pelafalan berikutnya"
+                      aria-label="Peringatan pelafalan berikutnya"
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                  </div>
                 )}
-              </button>
+              </div>
             )}
 
             {/* Tombol Play All */}
@@ -795,7 +915,7 @@ export default function AudioView({ project, setProject }) {
       </div>
 
       {/* DAFTAR SCENE */}
-      <ul className="space-y-2 mt-2">
+      <ul className="mt-2">
         {scenes.map((s, i) => {
           const [label, tone] = STATUS[s.audio_stale ? "stale" : s.audio_status] ?? STATUS.pending;
           const isCurrentPlayAll = currentPlayingIndex === i && playingAll;
@@ -804,10 +924,16 @@ export default function AudioView({ project, setProject }) {
           const isGroupLast = s.sentence_group_last ?? true;
           const groupScenes = s.sentence_group_scenes || [i];
 
+          const groupItemClass = isGrouped
+            ? isGroupLast
+              ? "rounded-none rounded-b-xl border-l-4 border-l-emerald-500/80 border-t-0 border-r border-b border-[#292e3b] bg-[#141720]/80"
+              : "rounded-none border-l-4 border-l-emerald-500/80 border-t-0 border-b border-b-[#292e3b]/50 border-r border-[#292e3b] bg-[#141720]/80"
+            : "card";
+
           return (
-            <div key={i} className={isGrouped && isGroupFirst ? "mt-3 first:mt-0" : ""}>
+            <div key={i} className={isGrouped && !isGroupFirst ? "mt-0" : isGrouped ? "mt-4 first:mt-0" : "mt-2"}>
               {isGrouped && isGroupFirst && (
-                <div className="rounded-t-lg bg-gradient-to-r from-emerald-500/15 via-[#181c26] to-[#141720] border-t border-l border-r border-emerald-500/30 shadow-sm overflow-hidden">
+                <div className="rounded-t-xl bg-gradient-to-r from-emerald-500/15 via-[#181c26] to-[#141720] border-t border-l-4 border-r border-t-emerald-500/30 border-l-emerald-500/80 border-r-[#292e3b] shadow-sm overflow-hidden">
                   <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 border-b border-emerald-500/20 text-[11px] font-mono text-emerald-300/90">
                     <div className="flex items-center gap-2 font-medium">
                       <span className="size-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
@@ -855,7 +981,7 @@ export default function AudioView({ project, setProject }) {
                         <audio
                           controls
                           preload="none"
-                          src={api.audioUrl(id, s.sentence_group_audio, s.audio_key)}
+                          src={api.audioUrl(id, s.sentence_group_audio, `${s.audio_key || ""}_${project.updated_at || ""}`)}
                           className="h-8 min-w-0 flex-1"
                           onPlay={() => {
                             if (playingAll) stopPlayAll();
@@ -888,19 +1014,15 @@ export default function AudioView({ project, setProject }) {
               )}
               <li
                 id={`audio-scene-${i}`}
-                className={`card flex scroll-mt-72 flex-col gap-3 p-3 sm:flex-row sm:items-center transition-all duration-200 ${
-                  isGrouped
-                    ? `border-l-4 border-l-emerald-500/80 bg-[#141720]/80 ${
-                        isGroupFirst ? "rounded-t-none border-t-0" : ""
-                      } ${!isGroupFirst && !isGroupLast ? "rounded-none border-t border-b border-[#292e3b]/30 -mt-2" : ""} ${
-                        isGroupLast ? "rounded-t-none -mt-2" : ""
-                      }`
-                    : ""
-                } ${
+                className={`flex scroll-mt-72 flex-col gap-3 p-3 sm:flex-row sm:items-center transition-all duration-200 ${groupItemClass} ${
                   isCurrentPlayAll
-                    ? "ring-2 ring-emerald-400 border-emerald-500/70 bg-emerald-500/10 shadow-lg shadow-emerald-500/10"
+                    ? isGrouped
+                      ? "bg-emerald-500/20 border-l-emerald-300"
+                      : "ring-2 ring-emerald-400 border-emerald-500/70 bg-emerald-500/10 shadow-lg shadow-emerald-500/10"
                     : failedNav.flash === i
                     ? "ring-2 ring-red-400 ring-offset-2 ring-offset-[#0f1117]"
+                    : auditNav.flash === i
+                    ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-[#0f1117] shadow-xl shadow-amber-500/25"
                     : s.audio_status === "failed"
                     ? "border-red-500/40"
                     : ""
@@ -951,9 +1073,7 @@ export default function AudioView({ project, setProject }) {
                   <NarrationText scene={s} onSave={async (text) => setProject(await api.setNarration(id, i, text))} />
                   {s.audio_audit_status === "warning" && (
                     <div
-                      onClick={() => setAuditModalScene({ scene: s, index: i, isGrouped, groupScenes })}
-                      className="mt-1.5 flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 text-xs text-amber-200 cursor-pointer hover:bg-amber-500/20 hover:border-amber-500/50 transition group"
-                      title="Klik untuk melihat perbandingan teks vs hasil suara"
+                      className="mt-1.5 flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 text-xs text-amber-200"
                     >
                       <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0 leading-tight">
@@ -965,9 +1085,25 @@ export default function AudioView({ project, setProject }) {
                           Didengar Whisper: <span className="italic text-amber-200">"{s.audio_audit_text ?? ""}"</span>
                         </div>
                       </div>
-                      <span className="shrink-0 text-[10px] text-amber-400 font-mono font-medium self-center group-hover:text-amber-300 underline">
-                        Detail →
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0 self-center">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveAudio(isGrouped && groupScenes?.length ? groupScenes : [i])}
+                          className="rounded px-2 py-0.5 text-[10px] font-mono font-medium text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/30 border border-emerald-500/40 flex items-center gap-1 transition cursor-pointer"
+                          title="Tandai suara scene ini sudah benar dan abaikan peringatan Whisper"
+                        >
+                          <Check size={11} />
+                          <span>Sudah Benar</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAuditModalScene({ scene: s, index: i, isGrouped, groupScenes })}
+                          className="rounded px-2 py-0.5 text-[10px] font-mono font-medium text-amber-300 bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/40 flex items-center gap-1 transition cursor-pointer"
+                          title="Lihat perbandingan lengkap naskah vs yang didengar Whisper"
+                        >
+                          <span>Detail →</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1020,7 +1156,7 @@ export default function AudioView({ project, setProject }) {
                         <audio
                           controls
                           preload="none"
-                          src={api.audioUrl(id, s.audio_file, s.audio_key)}
+                          src={api.audioUrl(id, s.audio_file, `${s.audio_key || ""}_${project.updated_at || ""}`)}
                           className="h-8 min-w-0 flex-1"
                           onPlay={() => {
                             if (playingAll) stopPlayAll();
@@ -1145,6 +1281,7 @@ export default function AudioView({ project, setProject }) {
       </button>
 
       <FailedNav nav={failedNav} noun="audio" />
+      <AuditNav nav={auditNav} hasFailed={failedNav.indexes.length > 0} />
       <VoiceLibrary
         open={libraryOpen}
         onClose={() => {
@@ -1158,6 +1295,7 @@ export default function AudioView({ project, setProject }) {
         <AuditModal
           data={auditModalScene}
           onClose={() => setAuditModalScene(null)}
+          onApprove={(indices) => handleApproveAudio(indices)}
           onRegenerate={(data) => {
             const indices = data.isGrouped && data.groupScenes?.length ? data.groupScenes : [data.index];
             act(() => api.generateAudio(id, { mode: "all", indices }));

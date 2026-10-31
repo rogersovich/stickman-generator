@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import audio, config, storage, voices
-from .models import AudioCancelIn, AudioGenerateIn, ProjectTtsIn, VoiceIn, VoiceSpeedIn, WorkerFailIn, WorkerHelloIn
+from .models import AudioCancelIn, AudioGenerateIn, AuditApproveIn, ProjectTtsIn, VoiceIn, VoiceSpeedIn, WorkerFailIn, WorkerHelloIn
 from .serialize import project_out
 
 router = APIRouter()
@@ -149,6 +149,20 @@ def audit_project_audio(project_id: str):
     p = storage.load(project_id)
     if not p:
         raise HTTPException(404, "Project tidak ditemukan")
+    return project_out(p)
+
+
+@router.post("/api/projects/{project_id}/audio/audit-approve")
+def approve_audio_audit(project_id: str, body: AuditApproveIn | None = None):
+    p = storage.load(project_id)
+    if not p:
+        raise HTTPException(404, "Project tidak ditemukan")
+    target_indices = body.indices if (body and body.indices is not None) else list(range(len(p.scenes)))
+    for idx in target_indices:
+        if 0 <= idx < len(p.scenes):
+            p.scenes[idx].audio_audit_status = "ok"
+            p.scenes[idx].audio_audit_issues = []
+    storage.save(p)
     return project_out(p)
 
 

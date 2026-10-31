@@ -111,11 +111,14 @@ def enqueue(project_id: str, mode: Literal["missing", "all"], indices: list[int]
         for i in targets:
             s = p.scenes[i]
             if s.audio_status == "generating":
-                continue
+                holder = _leases.get((p.id, i))
+                if indices is None and holder and holder[1] >= time.time():
+                    continue
+                _leases.pop((p.id, i), None)
             if not s.narration.strip():
                 s.audio_status, s.audio_error = "failed", "Narasi kosong"
                 continue
-            if mode == "all" or s.audio_status in ("pending", "failed") or is_stale(p, s):
+            if mode == "all" or s.audio_status in ("pending", "failed", "generating") or is_stale(p, s) or (indices is not None and i in targets):
                 s.audio_status, s.audio_error = "queued", None
 
         # Ensure all members of affected sentence groups are queued together
@@ -123,8 +126,9 @@ def enqueue(project_id: str, mode: Literal["missing", "all"], indices: list[int]
         for q_idx in list(queued_indices):
             for m in group_map.get(q_idx, [q_idx]):
                 m_scene = p.scenes[m]
-                if m_scene.audio_status != "generating" and m_scene.narration.strip():
+                if m_scene.narration.strip():
                     m_scene.audio_status, m_scene.audio_error = "queued", None
+                    _leases.pop((p.id, m), None)
 
         storage.save(p)
         return p
@@ -292,6 +296,9 @@ def save_group_result(project_id: str, index: int, name: str, key: str, data: by
                 r2.upload_file(dest_file, f"projects/{project_id}/audio/{name_}", "audio/wav")
             except Exception:
                 pass
+        if 0 <= index < len(p.scenes):
+            p.scenes[index].audio_key = key
+        storage.save(p)
         return p
 
 
@@ -347,6 +354,7 @@ def reap() -> int:
     """Put scenes whose worker went silent back in the queue."""
     with storage.lock:
         now = time.time()
+        count = 0
         expired = [key for key, (_, until) in _leases.items() if until < now]
         for project_id, index in expired:
             del _leases[(project_id, index)]
@@ -354,7 +362,21 @@ def reap() -> int:
             if p and 0 <= index < len(p.scenes) and p.scenes[index].audio_status == "generating":
                 p.scenes[index].audio_status = "queued"
                 storage.save(p)
-        return len(expired)
+                count += 1
+        for p in storage.list_all():
+            if p.status == "draft":
+                continue
+            changed = False
+            for idx, s in enumerate(p.scenes):
+                if s.audio_status == "generating":
+                    lease = _leases.get((p.id, idx))
+                    if lease is None:
+                        s.audio_status = "queued"
+                        changed = True
+                        count += 1
+            if changed:
+                storage.save(p)
+        return count
 
 
 def reset_on_startup() -> int:

@@ -52,6 +52,7 @@ export const api = {
   pauseAudio: (id) => request("POST", `/api/projects/${id}/audio/pause`),
   cancelAudio: (id, indices = null) => request("POST", `/api/projects/${id}/audio/cancel`, { indices }),
   auditAudio: (id) => request("POST", `/api/projects/${id}/audio/audit`),
+  approveAudioAudit: (id, indices = null) => request("POST", `/api/projects/${id}/audio/audit-approve`, { indices }),
   ttsStatus: () => request("GET", "/api/tts/status"),
   audioUrl: (id, file, v) => `/files/${id}/${file}?v=${encodeURIComponent(v ?? "")}`,
   downloadUrl: (id) => `/api/projects/${id}/download`,

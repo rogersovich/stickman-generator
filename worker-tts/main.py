@@ -93,7 +93,8 @@ def run_job(client: Client, job: dict, device: str) -> None:
                     except Exception:
                         pass
                 client.put_result(job["project_id"], s_idx, s_key, to_wav_bytes(s_wave, engine.sr), audit=audit_res)
-            client.put_group_result(job["project_id"], scene_indices[0], job["key"], to_wav_bytes(wave, engine.sr))
+            group_key = job.get("key") or (scene_keys[0] if scene_keys else "group")
+            client.put_group_result(job["project_id"], scene_indices[0], group_key, to_wav_bytes(wave, engine.sr))
             log(f"{label} {job['model']} Group of {len(scene_indices)} scenes ({len(wave) / engine.sr:.1f}s total) in {time.perf_counter() - t0:.1f}s ({device})")
         else:
             audit_res = None
