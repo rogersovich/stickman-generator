@@ -9,7 +9,10 @@ param (
     [string]$Mode = "" # "copy", "move", "check", "setup", or interactive if empty
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
+if (Test-Path Variable:PSNativeCommandUseErrorActionPreference) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 Set-Location $ScriptDir
 
@@ -80,6 +83,13 @@ if (-not $AccessKey -or -not $SecretKey -or -not $Endpoint) {
 
 # 2. Cek apakah rclone terinstall
 $rcloneCmd = Get-Command rclone -ErrorAction SilentlyContinue
+if (-not $rcloneCmd) {
+    $wingetRcloneDir = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
+    if (Test-Path (Join-Path $wingetRcloneDir "rclone.exe")) {
+        $env:Path = "$wingetRcloneDir;$env:Path"
+        $rcloneCmd = Get-Command rclone -ErrorAction SilentlyContinue
+    }
+}
 if (-not $rcloneCmd) {
     Write-Host "[PERINGATAN] rclone belum terinstall di komputer ini." -ForegroundColor Yellow
     Write-Host ""
@@ -234,13 +244,18 @@ function Do-CheckGDrive {
     Write-Host ">> Memeriksa folder di Google Drive ($GDriveDest)..." -ForegroundColor Cyan
     Write-Host "Akun: $GDriveEmail" -ForegroundColor Yellow
     
-    $sizeOutput = & rclone size $GDriveDest --config $ConfigPathAbs 2>&1
-    $sizeText = [string]::Join("`n", $sizeOutput)
-    if ($sizeText -match "directory not found") {
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+    $sizeOutput = @(& rclone size $GDriveDest --config $ConfigPathAbs 2>&1)
+    $sizeText = $sizeOutput -join "`n"
+    $ErrorActionPreference = $prevEAP
+
+    if ($LASTEXITCODE -ne 0 -or $sizeText -match "directory not found") {
         Write-Host ""
         Write-Host "[INFO] Folder '$FolderName' belum ada di Google Drive karena Anda belum pernah melakukan backup." -ForegroundColor Yellow
         Write-Host "Folder ini akan OTOMATIS dibuat oleh rclone saat Anda menjalankan menu [1] atau [2]." -ForegroundColor Green
     } else {
+        Write-Host ""
         Write-Host $sizeText
         Write-Host ""
         & rclone lsd $GDriveDest --config $ConfigPathAbs
@@ -256,6 +271,9 @@ if ($Mode.ToLower() -eq "copy") {
     exit 0
 } elseif ($Mode.ToLower() -eq "check") {
     Do-CheckR2
+    exit 0
+} elseif ($Mode.ToLower() -eq "checkgdrive") {
+    Do-CheckGDrive
     exit 0
 } elseif ($Mode.ToLower() -eq "setup") {
     Do-SetupRemote
