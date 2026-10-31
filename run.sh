@@ -14,7 +14,13 @@ done
 [ -d frontend/node_modules ] || (cd frontend && npm install)
 
 HOST="${HOST:-127.0.0.1}"
-START_TTS_WORKER="${START_TTS_WORKER:-1}"
+if [ "$(uname)" = "Darwin" ]; then
+  # On macOS, TTS models (VoxCPM2) take ~12GB RAM which freezes 8GB/16GB Macs.
+  # Keep TTS worker OFF by default on Mac; use START_TTS_WORKER=1 ./run.sh to force it.
+  START_TTS_WORKER="${START_TTS_WORKER:-0}"
+else
+  START_TTS_WORKER="${START_TTS_WORKER:-1}"
+fi
 
 (cd backend && uv run uvicorn app.main:app --reload --host "$HOST" --port 8000 2>&1 | sed -u 's/^/[backend]  /') &
 (cd frontend && npm run dev -- --strictPort 2>&1 | sed -u 's/^/[frontend] /') &
