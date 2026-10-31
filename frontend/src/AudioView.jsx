@@ -8,12 +8,12 @@ import { Select, useDialog } from "./ui.jsx";
 const MODEL_LABEL = { omnivoice: "OmniVoice", voxcpm2: "VoxCPM2" };
 
 const STATUS = {
-  pending: ["belum", "bg-slate-800 text-slate-400 border-slate-700/60"],
-  queued: ["antre", "bg-sky-500/10 text-sky-300 border-sky-500/30"],
-  generating: ["proses", "bg-amber-500/15 text-amber-300 border-amber-500/40 animate-pulse"],
-  done: ["selesai", "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"],
-  failed: ["gagal", "bg-red-500/15 text-red-300 border-red-500/30"],
-  stale: ["basi", "bg-amber-500/10 text-amber-300 border-amber-500/30"],
+  pending: ["BELUM ADA", "bg-amber-500/10 text-amber-400 border-amber-500/30"],
+  queued: ["ANTRE", "bg-sky-500/15 text-sky-300 border-sky-500/35 font-semibold"],
+  generating: ["MEMPROSES", "bg-amber-500/25 text-amber-200 border-amber-500/50 animate-pulse font-semibold"],
+  done: ["SELESAI", "bg-emerald-500/15 text-emerald-400 border-emerald-500/35 font-semibold"],
+  failed: ["GAGAL", "bg-red-500/20 text-red-300 border-red-500/40 font-semibold"],
+  stale: ["PERLU UPDATE", "bg-orange-500/15 text-orange-300 border-orange-500/30 font-semibold"],
 };
 
 const fmtSec = (s) => `${s.toFixed(1).replace(".", ",")} dtk`;
@@ -231,11 +231,40 @@ export default function AudioView({ project, setProject }) {
                 <Pause size={14} className="text-amber-400" /> Jeda ({queued} antre)
               </button>
             )}
-            <button className="btn-ghost text-xs" onClick={regenerateAll}>
-              <RotateCcw size={14} /> Ulang semua
+            <button
+              className="btn-ghost text-xs flex items-center gap-1.5 text-slate-300 hover:text-white"
+              onClick={regenerateAll}
+              title="Generate ulang audio untuk semua adegan (termasuk yang sudah selesai)"
+            >
+              <RotateCcw size={14} className="text-slate-400" /> Ulang Semua Audio
             </button>
-            <button className="btn-primary text-xs" onClick={() => act(() => api.generateAudio(id, { mode: "missing" }))}>
-              {busy ? <Loader2 size={14} className="animate-spin" /> : <AudioLines size={14} />} Generate audio
+            <button
+              className="btn-primary text-xs flex items-center gap-1.5 font-semibold"
+              disabled={busy}
+              onClick={() => act(() => api.generateAudio(id, { mode: "missing" }))}
+              title="Generate audio untuk adegan yang belum memiliki audio"
+            >
+              {busy ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Memproses Audio ({scenes.filter(s => s.audio_status === 'generating' || s.audio_status === 'queued').length})...</span>
+                </>
+              ) : done === 0 ? (
+                <>
+                  <AudioLines size={14} />
+                  <span>Generate Semua Audio ({scenes.length})</span>
+                </>
+              ) : done < scenes.length ? (
+                <>
+                  <AudioLines size={14} />
+                  <span>Generate Sisa Audio ({scenes.length - done})</span>
+                </>
+              ) : (
+                <>
+                  <Check size={14} className="text-emerald-300" />
+                  <span>Semua Audio Selesai ({scenes.length})</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -270,15 +299,46 @@ export default function AudioView({ project, setProject }) {
                 ) : (
                   <span className="flex-1 text-xs text-red-300">{s.audio_error}</span>
                 )}
-                <span className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${tone}`}>{label}</span>
-                <button
-                  className="btn-ghost px-2 py-1 text-[11px]"
-                  disabled={s.audio_status === "generating"}
-                  onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: [i] }))}
-                  title="Generate ulang audio scene ini"
-                >
-                  <RotateCcw size={12} /> Ulang
-                </button>
+                <span className={`rounded-md border px-2 py-0.5 font-mono text-[10px] tracking-wider uppercase font-semibold ${tone}`}>
+                  {label}
+                </span>
+
+                {s.audio_status === "generating" ? (
+                  <button
+                    className="btn-ghost px-2.5 py-1 text-[11px] text-amber-300 opacity-80 cursor-wait flex items-center gap-1.5"
+                    disabled
+                  >
+                    <Loader2 size={12} className="animate-spin text-amber-400" />
+                    <span>Memproses...</span>
+                  </button>
+                ) : s.audio_file && s.audio_status === "done" && !s.audio_stale ? (
+                  <button
+                    className="btn-ghost px-2.5 py-1 text-[11px] text-slate-300 hover:text-white flex items-center gap-1.5 transition"
+                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: [i] }))}
+                    title="Generate ulang audio untuk scene ini"
+                  >
+                    <RotateCcw size={12} className="text-slate-400" />
+                    <span>Generate Ulang</span>
+                  </button>
+                ) : s.audio_status === "failed" ? (
+                  <button
+                    className="rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-300 hover:bg-red-500/20 hover:border-red-500/60 flex items-center gap-1.5 transition"
+                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: [i] }))}
+                    title="Coba generate ulang audio yang gagal"
+                  >
+                    <RotateCcw size={12} />
+                    <span>Coba Lagi</span>
+                  </button>
+                ) : (
+                  <button
+                    className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/60 flex items-center gap-1.5 transition shadow-sm"
+                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: [i] }))}
+                    title="Generate audio untuk scene ini"
+                  >
+                    <AudioLines size={12} className="text-amber-400" />
+                    <span>Generate Audio</span>
+                  </button>
+                )}
               </div>
             </li>
           );
