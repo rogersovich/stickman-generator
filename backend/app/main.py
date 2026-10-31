@@ -32,23 +32,31 @@ from .styles import build_prompt, load_styles
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
-    if config.has_d1():
+
+    async def _async_startup():
+        loop = asyncio.get_running_loop()
+        if config.has_d1():
+            try:
+                await loop.run_in_executor(None, d1.init_db)
+            except Exception as e:
+                import logging
+                logging.getLogger("main").error(f"D1 init error: {e}")
         try:
-            d1.init_db()
+            await loop.run_in_executor(None, audio.reset_on_startup)
         except Exception as e:
             import logging
-            logging.getLogger("main").error(f"D1 init error: {e}")
-    audio.reset_on_startup()
+            logging.getLogger("main").error(f"Audio startup reset error: {e}")
+        try:
+            projects = await loop.run_in_executor(None, storage.list_all)
+            for p in projects:
+                try:
+                    db.save_project_record(p)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
-    async def _sync_local_db():
-        await asyncio.sleep(1)
-        for p in storage.list_all():
-            try:
-                db.save_project_record(p)
-            except Exception:
-                pass
-
-    asyncio.create_task(_sync_local_db())
+    asyncio.create_task(_async_startup())
     yield
 
 
