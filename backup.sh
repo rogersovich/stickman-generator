@@ -37,6 +37,8 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
     GDRIVE_FOLDER_NAME) GDRIVE_FOLDER_NAME="$value" ;;
     GDRIVE_BACKUP_DESTINATION) GDRIVE_BACKUP_DESTINATION="$value" ;;
     RCLONE_CONFIG_PATH) RCLONE_CONFIG_PATH="$value" ;;
+    GDRIVE_CLIENT_ID) GDRIVE_CLIENT_ID="$value" ;;
+    GDRIVE_CLIENT_SECRET) GDRIVE_CLIENT_SECRET="$value" ;;
   esac
 done < "$ENV_FILE"
 
@@ -84,6 +86,9 @@ echo ""
 is_remote_ready() {
   if [ -f "$CONFIG_ABS" ]; then
     if grep -q "\[$GDRIVE_REMOTE_NAME\]" "$CONFIG_ABS" && grep -q "token" "$CONFIG_ABS"; then
+      if [ -n "$GDRIVE_CLIENT_ID" ] && ! grep -q "client_id = $GDRIVE_CLIENT_ID" "$CONFIG_ABS"; then
+        return 1
+      fi
       return 0
     fi
   fi
@@ -97,9 +102,19 @@ do_setup_remote() {
   echo "=========================================================="
   echo "Browser akan terbuka untuk login ke akun Google Anda."
   echo "PENTING: Pastikan Anda memilih akun: $GDRIVE_EMAIL"
+  if [ -n "$GDRIVE_CLIENT_ID" ]; then
+    echo "Menggunakan Client ID Pribadi Google Cloud Anda (Bebas Limit & Permanen)."
+  fi
   echo ""
   echo "Menjalankan rclone config create untuk remote '$GDRIVE_REMOTE_NAME'..."
-  rclone config create "$GDRIVE_REMOTE_NAME" drive scope=drive --config "$CONFIG_ABS"
+  cmdArgs=("config" "create" "$GDRIVE_REMOTE_NAME" "drive" "scope=drive" "--config" "$CONFIG_ABS")
+  if [ -n "$GDRIVE_CLIENT_ID" ]; then
+    cmdArgs+=("client_id=$GDRIVE_CLIENT_ID")
+  fi
+  if [ -n "$GDRIVE_CLIENT_SECRET" ]; then
+    cmdArgs+=("client_secret=$GDRIVE_CLIENT_SECRET")
+  fi
+  rclone "${cmdArgs[@]}"
   
   if is_remote_ready; then
     echo ""

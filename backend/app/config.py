@@ -57,6 +57,8 @@ GDRIVE_REMOTE_NAME = os.getenv("GDRIVE_REMOTE_NAME", "gdrive_stickman")
 GDRIVE_FOLDER_NAME = os.getenv("GDRIVE_FOLDER_NAME", "StickmanGeneratorArchive")
 GDRIVE_BACKUP_DESTINATION = os.getenv("GDRIVE_BACKUP_DESTINATION", f"{GDRIVE_REMOTE_NAME}:{GDRIVE_FOLDER_NAME}")
 RCLONE_CONFIG_PATH = os.getenv("RCLONE_CONFIG_PATH", "data/rclone.conf")
+GDRIVE_CLIENT_ID = os.getenv("GDRIVE_CLIENT_ID", "")
+GDRIVE_CLIENT_SECRET = os.getenv("GDRIVE_CLIENT_SECRET", "")
 
 
 def has_d1() -> bool:

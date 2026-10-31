@@ -63,6 +63,9 @@ $ConfigPathRel = $EnvVars["RCLONE_CONFIG_PATH"]
 if (-not $ConfigPathRel) { $ConfigPathRel = "data/rclone.conf" }
 $ConfigPathAbs = Join-Path $ScriptDir $ConfigPathRel
 
+$ClientId = $EnvVars["GDRIVE_CLIENT_ID"]
+$ClientSecret = $EnvVars["GDRIVE_CLIENT_SECRET"]
+
 # Pastikan folder data ada
 $ConfigDir = Split-Path -Parent $ConfigPathAbs
 if (-not (Test-Path $ConfigDir)) {
@@ -116,6 +119,9 @@ function Test-RemoteReady {
     if (-not (Test-Path $ConfigPathAbs)) { return $false }
     $content = Get-Content $ConfigPathAbs -Raw -ErrorAction SilentlyContinue
     if ($content -and $content.Contains("[$RemoteName]") -and $content.Contains("token")) {
+        if ($ClientId -and -not $content.Contains("client_id = $ClientId")) {
+            return $false
+        }
         return $true
     }
     return $false
@@ -128,10 +134,20 @@ function Do-SetupRemote {
     Write-Host "==========================================================" -ForegroundColor Cyan
     Write-Host "Browser akan terbuka untuk login ke akun Google Anda." -ForegroundColor White
     Write-Host "PENTING: Pastikan Anda memilih akun: $GDriveEmail" -ForegroundColor Yellow
+    if ($ClientId) {
+        Write-Host "Menggunakan Client ID Pribadi Google Cloud Anda (Bebas Limit & Permanen)." -ForegroundColor Green
+    }
     Write-Host ""
     Write-Host "Menjalankan rclone config create untuk remote '$RemoteName'..." -ForegroundColor Cyan
     
-    & rclone config create $RemoteName drive scope=drive --config $ConfigPathAbs
+    $createArgs = @("config", "create", $RemoteName, "drive", "scope=drive", "--config", $ConfigPathAbs)
+    if ($ClientId) {
+        $createArgs += "client_id=$ClientId"
+    }
+    if ($ClientSecret) {
+        $createArgs += "client_secret=$ClientSecret"
+    }
+    & rclone $createArgs
     
     if (Test-RemoteReady) {
         Write-Host ""
