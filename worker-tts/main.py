@@ -48,6 +48,8 @@ def run_job(client: Client, job: dict, device: str) -> None:
         lora_scale = float(job.get("lora_scale") or job.get("params", {}).get("lora_scale", 0.7))
         engine.set_lora(lora_target, lora_scale)
 
+    if "speed" in job:
+        job["params"]["speed"] = float(job["speed"])
     pieces = prepare(job["text"], job["lang"], job["model"])
     if not pieces:
         raise ValueError("Narasi kosong")

@@ -212,14 +212,20 @@ export default function AudioView({ project, setProject }) {
   const defaultVoice = voices.find((v) => v.id === settings?.tts_voice_id);
   const voiceOptions = [
     { value: "", label: `Default${defaultVoice ? ` (${defaultVoice.name})` : " (belum diatur)"}` },
-    ...voices.map((v) => ({ value: v.id, label: v.name, desc: `${v.duration.toFixed(1)} dtk` })),
+    ...voices.map((v) => ({
+      value: v.id,
+      label: v.name,
+      desc: `${v.duration.toFixed(1)} dtk · ${(v.speed ?? (v.id === "suara-2" ? 0.9 : 1.0)).toFixed(2)}x`,
+    })),
   ];
   const modelOptions = [
     { value: "", label: `Default (${MODEL_LABEL[settings?.tts_model] ?? "OmniVoice"})` },
     { value: "omnivoice", label: "OmniVoice", desc: "24 kHz · ringan, cocok untuk Mac" },
     { value: "voxcpm2", label: "VoxCPM2", desc: "48 kHz · lebih berat, paling enak di GPU NVIDIA" },
   ];
-  const activeVoiceId = project.voice_id || settings?.tts_voice_id;
+  const activeVoiceId = project.voice_id || settings?.tts_voice_id || (voices[0]?.id ?? "suara-1");
+  const activeVoice = voices.find((v) => v.id === activeVoiceId);
+  const currentVoiceSpeed = activeVoice?.speed ?? (activeVoiceId === "suara-2" ? 0.9 : 1.0);
   const setTts = (patch) =>
     act(() => api.setProjectTts(id, { voice_id: project.voice_id, tts_model: project.tts_model, ...patch }));
 
@@ -419,7 +425,7 @@ export default function AudioView({ project, setProject }) {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+        <div className="grid gap-3 sm:grid-cols-[1.2fr_0.9fr_1fr_auto]">
           <div>
             <label className="label">Suara</label>
             <div className="flex gap-1.5">
@@ -434,6 +440,40 @@ export default function AudioView({ project, setProject }) {
                 {playingPreview ? <Pause size={14} /> : <Play size={14} />}
               </button>
             </div>
+          </div>
+          <div>
+            <label className="label flex items-center justify-between">
+              <span>Kecepatan</span>
+              <span className="font-mono text-[11px] font-semibold text-amber-400">
+                {currentVoiceSpeed.toFixed(2)}x
+              </span>
+            </label>
+            <Select
+              value={String(currentVoiceSpeed.toFixed(2))}
+              onChange={async (v) => {
+                const spd = parseFloat(v);
+                if (activeVoiceId) {
+                  try {
+                    await api.setVoiceSpeed(activeVoiceId, spd);
+                    setVoices((prev) =>
+                      prev.map((item) => (item.id === activeVoiceId ? { ...item, speed: spd } : item))
+                    );
+                  } catch (err) {
+                    console.error("Gagal menyimpan kecepatan suara:", err);
+                  }
+                }
+              }}
+              options={[
+                { value: "0.80", label: "0.80x (Sangat Santai)" },
+                { value: "0.85", label: "0.85x (Pelan & Bernafas)" },
+                { value: "0.90", label: "0.90x (Direkomendasikan ⭐)" },
+                { value: "0.95", label: "0.95x (Sedikit Lebih Santai)" },
+                { value: "1.00", label: "1.00x (Normal / Standar)" },
+                { value: "1.05", label: "1.05x (Agak Cepat)" },
+                { value: "1.10", label: "1.10x (Cepat)" },
+                { value: "1.15", label: "1.15x (Sangat Cepat)" },
+              ]}
+            />
           </div>
           <div>
             <label className="label">Model</label>

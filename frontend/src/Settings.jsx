@@ -252,7 +252,11 @@ export default function Settings() {
                   onChange={(v) => update({ tts_voice_id: v || null })}
                   options={[
                     { value: "", label: "Belum dipilih (pilih suara referensi)" },
-                    ...voices.map((v) => ({ value: v.id, label: v.name, desc: `${v.duration.toFixed(1)} dtk` })),
+                    ...voices.map((v) => ({
+                      value: v.id,
+                      label: `${v.name} (${(v.speed ?? (v.id === "suara-2" ? 0.9 : 1.0)).toFixed(2)}x)`,
+                      desc: `${v.duration.toFixed(1)} dtk · kecepatan ${(v.speed ?? (v.id === "suara-2" ? 0.9 : 1.0)).toFixed(2)}x`,
+                    })),
                   ]}
                 />
                 {settings.tts_voice_id && (
@@ -267,6 +271,34 @@ export default function Settings() {
                   </button>
                 )}
               </div>
+              {settings.tts_voice_id && (
+                <div className="pt-2">
+                  <SliderField
+                    label={`Kecepatan Default (${voices.find((v) => v.id === settings.tts_voice_id)?.name ?? "Suara"})`}
+                    hint="Faktor pengali kecepatan vokal khusus untuk suara ini (otomatis tersimpan)."
+                    value={
+                      voices.find((v) => v.id === settings.tts_voice_id)?.speed ??
+                      (settings.tts_voice_id === "suara-2" ? 0.9 : 1.0)
+                    }
+                    min={0.5}
+                    max={2.0}
+                    step={0.05}
+                    defaultValue={settings.tts_voice_id === "suara-2" ? 0.9 : 1.0}
+                    unit="x"
+                    onChange={async (v) => {
+                      const spd = parseFloat(v);
+                      try {
+                        await api.setVoiceSpeed(settings.tts_voice_id, spd);
+                        setVoices((prev) =>
+                          prev.map((item) => (item.id === settings.tts_voice_id ? { ...item, speed: spd } : item))
+                        );
+                      } catch (err) {
+                        console.error("Gagal update kecepatan suara di Settings:", err);
+                      }
+                    }}
+                  />
+                </div>
+              )}
             </Field>
 
             <Field label="Model TTS Default" hint="Pilih arsitektur model default yang digunakan worker.">

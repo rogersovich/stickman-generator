@@ -46,6 +46,7 @@ export const api = {
   deleteVoice: (id) => request("DELETE", `/api/voices/${id}`),
   importLegacyVoices: () => request("POST", "/api/voices/import-legacy"),
   voiceAudioUrl: (id) => `/api/voices/${id}/audio`,
+  setVoiceSpeed: (voiceId, speed) => request("PUT", `/api/voices/${voiceId}/speed`, { speed }),
   setProjectTts: (id, data) => request("PUT", `/api/projects/${id}/tts`, data),
   generateAudio: (id, data) => request("POST", `/api/projects/${id}/audio/generate`, data),
   pauseAudio: (id) => request("POST", `/api/projects/${id}/audio/pause`),

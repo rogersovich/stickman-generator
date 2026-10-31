@@ -50,5 +50,9 @@
     "cfg_value": 2.5,
     "inference_timesteps": 10,
     "studio_clean": true
+  },
+  "voice_speeds": {
+    "suara-1": 1.0,
+    "suara-2": 0.9
   }
 }

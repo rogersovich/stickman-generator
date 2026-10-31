@@ -15,7 +15,27 @@ def test_get_voices():
     suara1 = next((v for v in voices if v["id"] == "suara-1"), None)
     assert suara1 is not None
     assert suara1["name"] == "Suara 1"
-    assert suara1["lora_scale"] == 0.7
+    assert suara1["speed"] == 1.0
+
+    suara2 = next((v for v in voices if v["id"] == "suara-2"), None)
+    assert suara2 is not None
+    assert suara2["name"] == "Suara 2"
+    assert suara2["speed"] == 0.9
+
+
+def test_update_voice_speed():
+    res = client.put("/api/voices/suara-2/speed", json={"speed": 0.88})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["id"] == "suara-2"
+    assert data["speed"] == 0.88
+
+    res2 = client.get("/api/voices")
+    suara2 = next((v for v in res2.json() if v["id"] == "suara-2"), None)
+    assert suara2["speed"] == 0.88
+
+    # Reset back to 0.9
+    client.put("/api/voices/suara-2/speed", json={"speed": 0.9})
 
 def test_project_audio_flow(tmp_path, monkeypatch):
     p = Project(

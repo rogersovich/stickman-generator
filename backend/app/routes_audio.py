@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import audio, config, storage, voices
-from .models import AudioGenerateIn, ProjectTtsIn, VoiceIn, WorkerFailIn, WorkerHelloIn
+from .models import AudioGenerateIn, ProjectTtsIn, VoiceIn, VoiceSpeedIn, WorkerFailIn, WorkerHelloIn
 from .serialize import project_out
 
 router = APIRouter()
@@ -89,6 +89,11 @@ def delete_voice(voice_id: str):
 @router.get("/api/voices/{voice_id}/audio")
 def voice_audio(voice_id: str):
     return _voice_file(voice_id)
+
+
+@router.put("/api/voices/{voice_id}/speed")
+def update_voice_speed(voice_id: str, body: VoiceSpeedIn):
+    return _errors(voices.set_voice_speed, voice_id, body.speed)
 
 
 @router.post("/api/voices/import-legacy")

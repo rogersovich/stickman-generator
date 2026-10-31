@@ -7,5 +7,6 @@
   "description": "Narator Stickman 2 (LoRA 0.7x, Timesteps 8, Karakter Suara Alami)",
   "is_default": false,
   "lora_scale": 0.7,
-  "timesteps": 8
+  "timesteps": 8,
+  "speed": 0.9
 }

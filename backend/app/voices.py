@@ -33,6 +33,7 @@ class Voice(BaseModel):
     is_default: bool = False
     lora_scale: float | None = None
     timesteps: int | None = None
+    speed: float = 1.0
 
 
 class VoiceConfig(BaseModel):
@@ -47,6 +48,7 @@ class VoiceConfig(BaseModel):
     cfg_value: float = 2.5
     sample_rate: int = 48000
     is_default: bool = False
+    speed: float = 1.0
 
 
 DEFAULT_VOICE_ID = "suara-1"
@@ -66,6 +68,7 @@ VOICE_REGISTRY: dict[str, VoiceConfig] = {
         cfg_value=2.5,
         sample_rate=48000,
         is_default=True,
+        speed=1.0,
     ),
     "suara-2": VoiceConfig(
         id="suara-2",
@@ -79,6 +82,7 @@ VOICE_REGISTRY: dict[str, VoiceConfig] = {
         cfg_value=2.5,
         sample_rate=48000,
         is_default=False,
+        speed=0.9,
     ),
 }
 
@@ -121,8 +125,11 @@ def get(voice_id: str) -> Voice | None:
 
     meta = d / "meta.json"
     ref = ref_path(voice_id)
+    spd = get_voice_speed(voice_id)
     if meta.is_file() and ref.is_file():
-        return Voice.model_validate_json(meta.read_text(encoding="utf-8"))
+        v = Voice.model_validate_json(meta.read_text(encoding="utf-8"))
+        v.speed = spd
+        return v
 
     # Fallback to registry (e.g. suara-1) unless in an isolated temporary test folder
     is_temp_test = "pytest" in sys.modules and ("tmp" in str(config.VOICES_DIR).lower() or "pytest" in str(config.VOICES_DIR).lower())
@@ -140,6 +147,7 @@ def get(voice_id: str) -> Voice | None:
                 is_default=cfg.is_default,
                 lora_scale=cfg.lora_scale,
                 timesteps=cfg.inference_timesteps,
+                speed=spd,
             )
     return None
 
@@ -224,3 +232,63 @@ def import_legacy(db_path: Path) -> int:
         )
         imported += 1
     return imported
+
+
+def get_voice_speed(voice_id: str) -> float:
+    import json as _json
+    try:
+        p = config.BACKEND_DIR / "settings.json"
+        if p.is_file():
+            data = _json.loads(p.read_text(encoding="utf-8"))
+            speeds = data.get("voice_speeds", {})
+            if voice_id in speeds:
+                return float(speeds[voice_id])
+    except Exception:
+        pass
+    if voice_id in VOICE_REGISTRY:
+        return float(getattr(VOICE_REGISTRY[voice_id], "speed", 1.0))
+    try:
+        d = _dir(voice_id)
+        meta = d / "meta.json"
+        if meta.is_file():
+            m = _json.loads(meta.read_text(encoding="utf-8"))
+            if "speed" in m:
+                return float(m["speed"])
+    except Exception:
+        pass
+    return 1.0
+
+
+def set_voice_speed(voice_id: str, speed: float) -> Voice:
+    import json as _json
+    speed = round(max(0.5, min(2.0, float(speed))), 2)
+    try:
+        p = config.BACKEND_DIR / "settings.json"
+        if p.is_file():
+            data = _json.loads(p.read_text(encoding="utf-8"))
+        else:
+            data = {}
+        if "voice_speeds" not in data or not isinstance(data["voice_speeds"], dict):
+            data["voice_speeds"] = {}
+        data["voice_speeds"][voice_id] = speed
+        p.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[voices] error saving speed to settings.json: {e}")
+
+    try:
+        d = _dir(voice_id)
+        meta = d / "meta.json"
+        if meta.is_file():
+            m = _json.loads(meta.read_text(encoding="utf-8"))
+            m["speed"] = speed
+            meta.write_text(_json.dumps(m, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+    if voice_id in VOICE_REGISTRY:
+        VOICE_REGISTRY[voice_id].speed = speed
+
+    v = get(voice_id)
+    if v is None:
+        raise LookupError("voice not found")
+    return v

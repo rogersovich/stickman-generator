@@ -134,6 +134,28 @@ def studio_clean_master(audio: np.ndarray, sr: int = 48000) -> np.ndarray:
     return out.astype(np.float32)
 
 
+def apply_speed(audio: np.ndarray, speed: float, sr: int) -> np.ndarray:
+    """Change tempo without altering pitch using ffmpeg atempo."""
+    speed = float(speed)
+    if abs(speed - 1.0) <= 0.02 or len(audio) == 0:
+        return audio
+    import subprocess
+    try:
+        proc = subprocess.run(
+            [
+                "ffmpeg", "-y", "-f", "f32le", "-ar", str(sr), "-ac", "1", "-i", "pipe:0",
+                "-filter:a", f"atempo={speed}", "-f", "f32le", "-ar", str(sr), "-ac", "1", "pipe:1"
+            ],
+            input=audio.tobytes(),
+            capture_output=True,
+            check=True
+        )
+        if proc.stdout:
+            return np.frombuffer(proc.stdout, dtype=np.float32)
+    except Exception as e:
+        print(f"[worker-tts] warning: ffmpeg atempo failed ({e}), keeping original audio", flush=True)
+    return audio
+
 class VoxCPM2Engine:
     model_id = "voxcpm2"
     sr = 48000
@@ -229,6 +251,9 @@ class VoxCPM2Engine:
         if wav is None or len(wav) == 0:
             raise RuntimeError("VoxCPM2 tidak menghasilkan audio")
         arr = np.asarray(wav, dtype=np.float32).reshape(-1)
+        speed = float(params.get("speed", 1.0))
+        if abs(speed - 1.0) > 0.02:
+            arr = apply_speed(arr, speed, self.sr)
         if params.get("studio_clean", True):
             arr = studio_clean_master(arr, self.sr)
         # With CUDA graphs alive, empty_cache() crashes Windows (0xC0000005): only free memory when not compiled

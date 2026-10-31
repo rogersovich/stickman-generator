@@ -87,6 +87,7 @@ class AppSettings(BaseModel):
     # narration audio (TTS): defaults, a project can override voice and model
     tts_voice_id: str | None = None
     tts_model: TtsModel = "omnivoice"
+    voice_speeds: dict[str, float] = Field(default_factory=lambda: {"suara-1": 1.0, "suara-2": 0.9})
     omnivoice: OmniVoiceParams = Field(default_factory=OmniVoiceParams)
     voxcpm2: VoxCPM2Params = Field(default_factory=VoxCPM2Params)
 

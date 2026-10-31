@@ -157,6 +157,10 @@ class SceneSfxIn(BaseModel):
     sfx_pos: SfxPos = "start"
 
 
+class VoiceSpeedIn(BaseModel):
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+
+
 class VoiceIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     transcript: str = ""

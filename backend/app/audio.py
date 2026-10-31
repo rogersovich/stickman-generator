@@ -34,12 +34,15 @@ def resolve(p: Project) -> tuple[str | None, TtsModel]:
     return p.voice_id or cfg.tts_voice_id, p.tts_model or cfg.tts_model
 
 
-def audio_key(narration: str, voice_id: str | None, model: str) -> str:
-    return hashlib.sha1(f"{model}\n{voice_id}\n{narration.strip()}".encode()).hexdigest()[:16]
+def audio_key(narration: str, voice_id: str | None, model: str, speed: float = 1.0) -> str:
+    speed_tag = f"\n{round(speed, 2)}" if abs(speed - 1.0) > 0.01 else ""
+    return hashlib.sha1(f"{model}\n{voice_id}{speed_tag}\n{narration.strip()}".encode()).hexdigest()[:16]
 
 
 def is_stale(p: Project, s: Scene) -> bool:
-    return s.audio_status == "done" and s.audio_key != audio_key(s.narration, *resolve(p))
+    voice_id, model = resolve(p)
+    speed = voices.get_voice_speed(voice_id) if voice_id else 1.0
+    return s.audio_status == "done" and s.audio_key != audio_key(s.narration, voice_id, model, speed)
 
 
 def _load(project_id: str) -> Project:
@@ -140,6 +143,8 @@ def claim(name: str, models: list[str], is_local: bool) -> dict | None:
             storage.save(p)
             _leases[(p.id, i)] = (name, time.time() + config.TTS_LEASE_SECONDS)
             params = getattr(settings.load(), model).model_dump()
+            voice_speed = voices.get_voice_speed(voice.id)
+            params["speed"] = voice_speed
             v_cfg = voices.VOICE_REGISTRY.get(voice.id)
             lora_path = getattr(v_cfg, "lora_path", None) if v_cfg else None
             lora_scale = getattr(v_cfg, "lora_scale", None) if v_cfg else None
@@ -153,8 +158,9 @@ def claim(name: str, models: list[str], is_local: bool) -> dict | None:
                 "voice_transcript": voice.transcript,
                 "model": model,
                 "params": params,
+                "speed": voice_speed,
                 "seed": seed,
-                "key": audio_key(s.narration, voice_id, model),
+                "key": audio_key(s.narration, voice_id, model, voice_speed),
                 "lora_path": lora_path,
                 "lora_scale": lora_scale,
             }
