@@ -41,7 +41,7 @@ const BADGE = {
   failed: "bg-red-500/15 text-red-300 border border-red-500/30",
 };
 
-function SceneNote({ scene }) {
+function SceneNote({ scene, now = Date.now() }) {
   if (!scene.error) return null;
   const done = scene.image_status === "done";
   // a finished frame only warns when something went wrong (failed 2K download, low-res fallback)
@@ -51,15 +51,40 @@ function SceneNote({ scene }) {
     : warn
     ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
     : "border-[#292e3b] bg-[#12141a] text-slate-400";
+
+  const isFailed = scene.image_status === "failed";
+  const retryCount = scene.auto_retry_count || 0;
+  const maxRetries = 3;
+
+  let retryInfo = null;
+  if (isFailed && scene.failed_at && retryCount < maxRetries) {
+    const elapsed = Math.floor((now - new Date(scene.failed_at).getTime()) / 1000);
+    const remaining = Math.max(0, 60 - elapsed);
+    if (remaining > 0) {
+      retryInfo = `⏳ Auto-retry dalam ${remaining}s (percobaan ${retryCount + 1}/${maxRetries})`;
+    } else {
+      retryInfo = `⏳ Menunggu giliran antrian... (percobaan ${retryCount + 1}/${maxRetries})`;
+    }
+  } else if (isFailed && retryCount >= maxRetries) {
+    retryInfo = `⚠️ Gagal setelah ${maxRetries}x percobaan. Klik 'Coba Lagi' untuk generate ulang.`;
+  }
+
   return (
-    <p className={`rounded-lg px-2.5 py-1.5 text-xs break-words border ${tone}`}>
-      {warn && <AlertTriangle size={13} className="mr-1 inline -translate-y-px" />}
-      {scene.error}
-    </p>
+    <div className={`rounded-lg px-2.5 py-1.5 text-xs break-words border space-y-1 ${tone}`}>
+      <div>
+        {warn && <AlertTriangle size={13} className="mr-1 inline -translate-y-px" />}
+        {scene.error}
+      </div>
+      {retryInfo && (
+        <div className="font-mono text-[10px] text-amber-300/90 font-medium pt-0.5">
+          {retryInfo}
+        </div>
+      )}
+    </div>
   );
 }
 
-function Lightbox({ project, index, onClose, onNavigate, onRetry, onRedownload, onEditNarration, onGenerateSceneAudio }) {
+function Lightbox({ project, index, onClose, onNavigate, onRetry, onRedownload, onEditNarration, onGenerateSceneAudio, now }) {
   const scene = project.scenes[index];
   const [size, setSize] = useState(null);
   const count = project.scenes.length;
@@ -204,7 +229,7 @@ function Lightbox({ project, index, onClose, onNavigate, onRetry, onRedownload, 
             </details>
           )}
 
-          <SceneNote scene={scene} />
+          <SceneNote scene={scene} now={now} />
 
           <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs text-slate-400 pt-1">
             <span className={`rounded px-2 py-0.5 ${BADGE[scene.image_status]}`}>{scene.image_status}</span>
@@ -283,6 +308,13 @@ export default function ProgressView({ project, setProject }) {
   const [narrationIndex, setNarrationIndex] = useState(null);
   const [cols, setCols] = useGridCols(project.format);
   const compact = cols === 4; // narrow cards: icon-only actions, shorter narration
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (failed === 0) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [failed]);
 
   const failedNav = useFailedNav(
     project.scenes.flatMap((s, i) => (s.image_status === "failed" ? [i] : [])),
@@ -311,6 +343,21 @@ export default function ProgressView({ project, setProject }) {
       confirmLabel: failed ? "Ya, Coba Lagi" : "Ya, Generate Ulang",
     });
     if (ok) act(() => api.retry(id, i))();
+  }
+
+  async function handleRetryAllFailed() {
+    const ok = await dialog.confirm({
+      title: `Coba Lagi Semua Frame Gagal (${failed})?`,
+      message: `Semua ${failed} frame yang error akan dimasukkan kembali ke antrian Flow dan worker otomatis dilanjutkan.`,
+      confirmLabel: "Ya, Coba Lagi Semua",
+    });
+    if (!ok) return;
+    try {
+      const updated = await api.retryFailed(id);
+      setProject(updated);
+    } catch (e) {
+      await dialog.alert({ title: "Gagal mengulang antrian", message: e.message });
+    }
   }
   const redownload = (i) => act(() => api.redownload(id, i))();
   const lowRes = project.scenes.filter((s) => s.needs_hd).length;
@@ -502,6 +549,15 @@ export default function ProgressView({ project, setProject }) {
           >
             <Zap size={14} className="text-amber-400" /> Test (2 Frame)
           </button>
+          {failed > 0 && (
+            <button
+              className="btn-primary text-xs bg-rose-600 hover:bg-rose-500 border-rose-500 text-white flex items-center gap-1.5 shadow-sm"
+              onClick={handleRetryAllFailed}
+              title="Generate ulang semua frame yang gagal sekaligus"
+            >
+              <RotateCcw size={13} className="text-white" /> Coba Lagi Semua Gagal ({failed})
+            </button>
+          )}
           {lowRes > 0 && (
             <button className="btn-primary text-xs" onClick={act(() => api.redownloadAll(id))}>
               <Download size={14} /> Ambil 2K Semua ({lowRes})
@@ -520,6 +576,23 @@ export default function ProgressView({ project, setProject }) {
         </div>
 
         {/* Informational Callouts */}
+        {failed > 0 && (
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-200 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle size={16} className="text-rose-400 shrink-0" />
+              <div>
+                <b className="text-rose-300">{failed} frame gagal</b> (misal timeout koneksi Flow). Sistem otomatis memasukkan kembali ke antrian setiap 1 menit, atau klik tombol untuk langsung mencoba ulang semuanya sekarang.
+              </div>
+            </div>
+            <button
+              className="btn-primary text-xs bg-rose-600 hover:bg-rose-500 border-rose-500 text-white shrink-0 px-3 py-1.5 flex items-center gap-1.5 font-medium shadow-sm"
+              onClick={handleRetryAllFailed}
+            >
+              <RotateCcw size={13} /> Coba Lagi Semua Gagal ({failed})
+            </button>
+          </div>
+        )}
+
         {lowRes > 0 && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs leading-relaxed text-amber-200 flex items-start gap-2.5">
             <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5" />
@@ -633,7 +706,7 @@ export default function ProgressView({ project, setProject }) {
                 )}
 
                 <p className={`text-xs leading-relaxed text-slate-300 ${compact ? "line-clamp-2" : "line-clamp-3"}`}>{s.narration}</p>
-                <SceneNote scene={s} />
+                <SceneNote scene={s} now={now} />
 
                 {/* Audio Player Card Bar */}
                 {s.audio_file ? (
@@ -739,6 +812,7 @@ export default function ProgressView({ project, setProject }) {
           onRetry={retry}
           onRedownload={redownload}
           onGenerateSceneAudio={handleGenerateSceneAudio}
+          now={now}
           onEditNarration={(i) => {
             setPreview(null);
             setNarrationIndex(i);

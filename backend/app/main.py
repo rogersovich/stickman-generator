@@ -414,9 +414,32 @@ def retry_scene(project_id: str, index: int):
             raise HTTPException(404, "scene not found")
         s = p.scenes[index]
         s.image_status, s.error, s.job_kind = "pending", None, "generate"
-        if p.status == "done":
+        s.failed_at = None
+        s.auto_retry_count = 0
+        if p.status in ("done", "paused"):
             p.status = "generating"
         storage.save(p)
+        return _out(p)
+
+
+@app.post("/api/projects/{project_id}/retry-failed")
+def retry_failed_scenes(project_id: str):
+    """Re-queue all failed scenes in this project back into the generation queue."""
+    with storage.lock:
+        p = _get(project_id)
+        count = 0
+        for s in p.scenes:
+            if s.image_status == "failed" and not getattr(s, "is_merged", False):
+                s.image_status = "pending"
+                s.error = None
+                s.job_kind = "generate"
+                s.failed_at = None
+                s.auto_retry_count = 0
+                count += 1
+        if count > 0:
+            if p.status in ("done", "paused"):
+                p.status = "generating"
+            storage.save(p)
         return _out(p)
 
 

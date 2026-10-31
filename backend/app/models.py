@@ -29,6 +29,8 @@ class Scene(BaseModel):
     flow_src: str | None = None  # Exact Google Flow CDN image URL for 100% reliable tracking
     error: str | None = None
     started_at: str | None = None
+    failed_at: str | None = None  # ISO timestamp when the scene failed
+    auto_retry_count: int = 0  # Number of automatic retry attempts
     image_hd: bool | None = None  # True = full-res download from Flow, False = thumbnail, None = unknown (old data)
     job_kind: JobKind = "generate"  # "redownload" = fetch the full-res file of an existing Flow image
     # narration audio (step 2): one TTS clip per scene

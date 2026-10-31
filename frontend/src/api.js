@@ -34,6 +34,7 @@ export const api = {
   testRun: (id, limit = 2) => request("POST", `/api/projects/${id}/test-run?limit=${limit}`),
   swapScenes: (id, a, b) => request("POST", `/api/projects/${id}/swap-scenes?a=${a}&b=${b}`),
   retry: (id, i) => request("POST", `/api/projects/${id}/scenes/${i}/retry`),
+  retryFailed: (id) => request("POST", `/api/projects/${id}/retry-failed`),
   narrationOptions: (id, i, body) => request("POST", `/api/projects/${id}/scenes/${i}/narration-options`, body),
   setNarration: (id, i, narration) => request("PUT", `/api/projects/${id}/scenes/${i}/narration`, { narration }),
   redownloadAll: (id) => request("POST", `/api/projects/${id}/redownload`),

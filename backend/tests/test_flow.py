@@ -480,3 +480,72 @@ def test_export_capcut_draft(client, tmp_path):
     assert p_updated["export_opts"]["zoom_ratio"] == 1.30
     assert p_updated["export_opts"]["transition_duration"] == 0.7
 
+
+def test_retry_failed_scenes_endpoint(client):
+    p = client.post("/api/projects", json={"topic": "retry test", "scene_count": 3}).json()
+    pid = p["id"]
+    client.post(f"/api/projects/{pid}/confirm")
+
+    # Mark scene 0 and 1 failed
+    client.post(f"/api/jobs/{pid}/0/fail", json={"error": "timeout: no result from extension"})
+    client.post(f"/api/jobs/{pid}/1/fail", json={"error": "timeout: gambar Flow tidak selesai"})
+
+    p_check = client.get(f"/api/projects/{pid}").json()
+    assert p_check["scenes"][0]["image_status"] == "failed"
+    assert p_check["scenes"][1]["image_status"] == "failed"
+    assert p_check["scenes"][2]["image_status"] == "pending"
+
+    # Call /retry-failed
+    res = client.post(f"/api/projects/{pid}/retry-failed")
+    assert res.status_code == 200
+    p_retried = res.json()
+    assert p_retried["status"] == "generating"
+    assert p_retried["scenes"][0]["image_status"] == "pending"
+    assert p_retried["scenes"][0]["error"] is None
+    assert p_retried["scenes"][0]["auto_retry_count"] == 0
+    assert p_retried["scenes"][1]["image_status"] == "pending"
+    assert p_retried["scenes"][1]["error"] is None
+    assert p_retried["scenes"][1]["auto_retry_count"] == 0
+
+
+def test_auto_retry_stale_failed_timing(client):
+    from datetime import datetime, timezone, timedelta
+    from app import storage, jobs
+
+    p = client.post("/api/projects", json={"topic": "auto retry test", "scene_count": 2}).json()
+    pid = p["id"]
+    client.post(f"/api/projects/{pid}/confirm")
+
+    # Mark scene 0 failed with a timestamp 10 seconds ago (< 60s)
+    proj = storage.load(pid)
+    ten_sec_ago = (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()
+    proj.scenes[0].image_status = "failed"
+    proj.scenes[0].error = "temp error"
+    proj.scenes[0].failed_at = ten_sec_ago
+    proj.scenes[1].image_status = "done"  # scene 1 already done
+    proj.status = "done"
+    storage.save(proj)
+
+    # Next job should NOT pick it up yet (delay not reached)
+    job = jobs.next_job()
+    assert job is None
+    proj_check = storage.load(pid)
+    assert proj_check.scenes[0].image_status == "failed"
+
+    # Now simulate failed timestamp 65 seconds ago (> 60s)
+    sixty_five_sec_ago = (datetime.now(timezone.utc) - timedelta(seconds=65)).isoformat()
+    proj_check.scenes[0].failed_at = sixty_five_sec_ago
+    storage.save(proj_check)
+
+    # Next job SHOULD pick it up and re-queue it
+    job = jobs.next_job()
+    assert job is not None
+    assert job["project_id"] == pid
+    assert job["scene_index"] == 0
+
+    proj_after = storage.load(pid)
+    assert proj_after.status == "generating"
+    assert proj_after.scenes[0].image_status == "generating"
+    assert proj_after.scenes[0].auto_retry_count == 1
+
+

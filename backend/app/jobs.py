@@ -90,7 +90,37 @@ def _fail_scene(s: Scene, error: str) -> None:
         s.image_status, s.error = "done", f"ambil ulang HD gagal: {error}"[:500]
     else:
         s.image_status, s.error = "failed", error[:500]
+        s.failed_at = now_iso()
     s.job_kind = "generate"
+
+
+def auto_retry_stale_failed(project: Project) -> bool:
+    """Auto-retry scenes that failed at least auto_retry_delay_sec ago (default 60s)."""
+    cfg = settings.load()
+    if not getattr(cfg, "auto_retry_failed_images", True):
+        return False
+    delay = getattr(cfg, "auto_retry_delay_sec", config.AUTO_RETRY_DELAY_SECONDS) or config.AUTO_RETRY_DELAY_SECONDS
+    max_retries = getattr(cfg, "max_auto_retries", config.MAX_AUTO_RETRIES) or config.MAX_AUTO_RETRIES
+    changed = False
+
+    for s in project.scenes:
+        if getattr(s, "is_merged", False):
+            continue
+        if s.image_status == "failed" and getattr(s, "auto_retry_count", 0) < max_retries:
+            failed_age = _age_seconds(s.failed_at)
+            if failed_age >= delay:
+                s.image_status = "pending"
+                s.error = None
+                s.started_at = None
+                s.job_kind = "generate"
+                s.auto_retry_count = getattr(s, "auto_retry_count", 0) + 1
+                s.failed_at = None
+                changed = True
+
+    if changed and project.status == "done":
+        project.status = "generating"
+
+    return changed
 
 
 def expire_stale(project: Project) -> bool:
@@ -123,9 +153,29 @@ def _refresh_status(project: Project) -> None:
 
 def next_job() -> dict | None:
     with storage.lock:
-        active = [p for p in storage.list_all() if p.status == "generating"]
+        all_projects = storage.list_all()
+        cfg = settings.load()
+        max_retries = getattr(cfg, "max_auto_retries", config.MAX_AUTO_RETRIES) or config.MAX_AUTO_RETRIES
+        auto_retry = getattr(cfg, "auto_retry_failed_images", True)
+
+        active = []
+        for p in all_projects:
+            if p.status == "generating":
+                active.append(p)
+            elif p.status == "done" and auto_retry:
+                has_retryable = any(
+                    s.image_status == "failed"
+                    and not getattr(s, "is_merged", False)
+                    and getattr(s, "auto_retry_count", 0) < max_retries
+                    for s in p.scenes
+                )
+                if has_retryable:
+                    active.append(p)
+
         for p in active:
-            if expire_stale(p):
+            stale = expire_stale(p)
+            retried = auto_retry_stale_failed(p)
+            if stale or retried:
                 _refresh_status(p)
                 storage.save(p)
         cfg = settings.load()
@@ -310,6 +360,8 @@ def clear_images(project_id: str) -> Project:
             s.flow_src = None
             s.error = None
             s.started_at = None
+            s.failed_at = None
+            s.auto_retry_count = 0
             s.image_hd = None
             s.job_kind = "generate"
         p.status = "paused"

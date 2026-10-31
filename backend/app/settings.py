@@ -83,6 +83,9 @@ class AppSettings(BaseModel):
 
     # advanced
     image_timeout_sec: float = Field(60.0, ge=10, le=1800)
+    auto_retry_failed_images: bool = True
+    auto_retry_delay_sec: float = Field(60.0, ge=5, le=600)
+    max_auto_retries: int = Field(3, ge=1, le=10)
 
     # narration audio (TTS): defaults, a project can override voice and model
     tts_voice_id: str | None = None

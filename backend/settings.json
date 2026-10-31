@@ -38,6 +38,9 @@
   "download_mode": "batch_end",
   "notifications": true,
   "image_timeout_sec": 60.0,
+  "auto_retry_failed_images": true,
+  "auto_retry_delay_sec": 60.0,
+  "max_auto_retries": 3,
   "tts_voice_id": "suara-1",
   "tts_model": "voxcpm2",
   "omnivoice": {

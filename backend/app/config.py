@@ -41,6 +41,9 @@ DELAY_BETWEEN_IMAGES_MAX = float(os.getenv("DELAY_BETWEEN_IMAGES_MAX", "60"))
 REDOWNLOAD_DELAY_MIN = float(os.getenv("REDOWNLOAD_DELAY_MIN", "3"))
 REDOWNLOAD_DELAY_MAX = float(os.getenv("REDOWNLOAD_DELAY_MAX", "8"))
 JOB_TIMEOUT_SECONDS = float(os.getenv("JOB_TIMEOUT_SECONDS", "60"))
+AUTO_RETRY_FAILED_IMAGES = os.getenv("AUTO_RETRY_FAILED_IMAGES", "true").lower() in ("1", "true", "yes")
+AUTO_RETRY_DELAY_SECONDS = float(os.getenv("AUTO_RETRY_DELAY_SECONDS", "60"))
+MAX_AUTO_RETRIES = int(os.getenv("MAX_AUTO_RETRIES", "3"))
 
 # Cloudflare D1 & R2
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
