@@ -4,6 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BACKEND_DIR.parent
 load_dotenv(BACKEND_DIR / ".env")
 
 
@@ -70,7 +71,7 @@ def has_r2() -> bool:
 
 
 # narration audio (TTS)
-VOICES_DIR = _path(os.getenv("VOICES_DIR", "data/voices"))
+VOICES_DIR = (PROJECT_ROOT / "data" / "voices") if (PROJECT_ROOT / "data" / "voices").exists() and "VOICES_DIR" not in os.environ else _path(os.getenv("VOICES_DIR", "data/voices"))
 # custom sound effects for the CapCut export (built-in ones ship in backend/assets/sfx)
 SFX_DIR = _path(os.getenv("SFX_DIR", "data/sfx"))
 # shared secret for TTS workers on other machines; empty = only workers on this machine (localhost)

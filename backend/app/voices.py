@@ -130,8 +130,7 @@ def get(voice_id: str) -> Voice | None:
 
 
 def list_voices() -> list[Voice]:
-    if not config.VOICES_DIR.exists():
-        return []
+    config.VOICES_DIR.mkdir(parents=True, exist_ok=True)
     found = [get(d.name) for d in config.VOICES_DIR.iterdir() if d.is_dir()]
     is_temp_test = "pytest" in sys.modules and ("tmp" in str(config.VOICES_DIR).lower() or "pytest" in str(config.VOICES_DIR).lower())
     if not is_temp_test and "suara-1" in VOICE_REGISTRY and not any(v and v.id == "suara-1" for v in found):
