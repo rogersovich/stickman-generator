@@ -2,12 +2,16 @@
 $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
 
-# Check busy ports
+# Check and free busy ports
 foreach ($port in @(8000, 5173)) {
     $busy = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue
     if ($busy) {
-        Write-Error "Port $port is already in use (app already running?). Stop it first before starting."
-        exit 1
+        $pids = $busy.OwningProcess | Select-Object -Unique
+        Write-Host "Port $port masih digunakan oleh proses lama ($($pids -join ', ')). Menutup proses lama..." -ForegroundColor Yellow
+        foreach ($procId in $pids) {
+            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Milliseconds 500
     }
 }
 

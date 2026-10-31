@@ -4,9 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 for port in 8000 5173; do
-  if lsof -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "Port $port is already in use (app already running?). Stop it first: lsof -ti:$port | xargs kill"
-    exit 1
+  pids=$(lsof -ti :"$port" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo "Port $port masih digunakan oleh proses lama ($pids). Menutup proses lama..."
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+    sleep 0.5
   fi
 done
 
