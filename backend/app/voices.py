@@ -66,7 +66,20 @@ VOICE_REGISTRY: dict[str, VoiceConfig] = {
         cfg_value=2.5,
         sample_rate=48000,
         is_default=True,
-    )
+    ),
+    "suara-2": VoiceConfig(
+        id="suara-2",
+        name="Suara 2",
+        description="Narator Stickman 2 (LoRA 0.7x, Timesteps 8, Karakter Suara Alami)",
+        lora_path=str(CHECKPOINTS_DIR / "lora_stickman_voice_2" / "latest"),
+        reference_wav=str(ROOT_VOICES_DIR / "suara-2" / "reference.wav"),
+        reference_text="Hari ini kamu lelah. Kamu baru saja pulang dari aktivitas rutinmu sebagai pekerja. Dan kepalamu masih penuh dengan list pekerjaanmu untuk besok.",
+        lora_scale=0.7,
+        inference_timesteps=8,
+        cfg_value=2.5,
+        sample_rate=48000,
+        is_default=False,
+    ),
 }
 
 
@@ -88,8 +101,10 @@ def ref_path(voice_id: str) -> Path:
         return d / "ref.wav"
     if (d / "reference.wav").is_file():
         return d / "reference.wav"
-    if voice_id == "suara-1" and (ROOT_VOICES_DIR / "suara-1" / "reference.wav").is_file():
-        return ROOT_VOICES_DIR / "suara-1" / "reference.wav"
+    if voice_id in VOICE_REGISTRY and (ROOT_VOICES_DIR / voice_id / "reference.wav").is_file():
+        return ROOT_VOICES_DIR / voice_id / "reference.wav"
+    if voice_id in VOICE_REGISTRY and (ROOT_VOICES_DIR / voice_id / "ref.wav").is_file():
+        return ROOT_VOICES_DIR / voice_id / "ref.wav"
     return d / "ref.wav"
 
 
@@ -133,10 +148,12 @@ def list_voices() -> list[Voice]:
     config.VOICES_DIR.mkdir(parents=True, exist_ok=True)
     found = [get(d.name) for d in config.VOICES_DIR.iterdir() if d.is_dir()]
     is_temp_test = "pytest" in sys.modules and ("tmp" in str(config.VOICES_DIR).lower() or "pytest" in str(config.VOICES_DIR).lower())
-    if not is_temp_test and "suara-1" in VOICE_REGISTRY and not any(v and v.id == "suara-1" for v in found):
-        s1 = get("suara-1")
-        if s1:
-            found.append(s1)
+    if not is_temp_test:
+        for reg_id in VOICE_REGISTRY:
+            if not any(v and v.id == reg_id for v in found):
+                reg_v = get(reg_id)
+                if reg_v:
+                    found.append(reg_v)
     return sorted((v for v in found if v), key=lambda v: v.name.lower())
 
 

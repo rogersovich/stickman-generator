@@ -1,0 +1,11 @@
+{
+  "id": "suara-2",
+  "name": "Suara 2",
+  "transcript": "Hari ini kamu lelah. Kamu baru saja pulang dari aktivitas rutinmu sebagai pekerja. Dan kepalamu masih penuh dengan list pekerjaanmu untuk besok.",
+  "duration": 8.5,
+  "created_at": "2026-10-31T07:00:00Z",
+  "description": "Narator Stickman 2 (LoRA 0.7x, Timesteps 8, Karakter Suara Alami)",
+  "is_default": false,
+  "lora_scale": 0.7,
+  "timesteps": 8
+}

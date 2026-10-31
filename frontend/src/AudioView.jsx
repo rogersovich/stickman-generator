@@ -111,6 +111,7 @@ export default function AudioView({ project, setProject }) {
   const [playCurrentTime, setPlayCurrentTime] = useState(0);
   const [playDuration, setPlayDuration] = useState(0);
   const playAllAudioRef = useRef(null);
+  const stopRequestedRef = useRef(false);
 
   // Floating Scroll-To-Top State
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -233,9 +234,15 @@ export default function AudioView({ project, setProject }) {
 
   // --- PLAY ALL SEQUENTIAL PLAYBACK LOGIC ---
   const stopPlayAll = () => {
+    stopRequestedRef.current = true;
     if (playAllAudioRef.current) {
-      playAllAudioRef.current.pause();
-      playAllAudioRef.current.src = "";
+      const a = playAllAudioRef.current;
+      a.onended = null;
+      a.onerror = null;
+      a.ontimeupdate = null;
+      a.pause();
+      a.removeAttribute("src");
+      a.load();
       playAllAudioRef.current = null;
     }
     setPlayingAll(false);
@@ -264,6 +271,7 @@ export default function AudioView({ project, setProject }) {
   };
 
   const playSceneAudio = (index) => {
+    if (stopRequestedRef.current) return;
     if (index < 0 || index >= scenes.length) {
       stopPlayAll();
       return;
@@ -281,19 +289,29 @@ export default function AudioView({ project, setProject }) {
 
     stopPreview();
 
-    if (!playAllAudioRef.current) {
+    // Detach listeners from previous audio if any
+    if (playAllAudioRef.current) {
+      const old = playAllAudioRef.current;
+      old.onended = null;
+      old.onerror = null;
+      old.ontimeupdate = null;
+      old.pause();
+    } else {
       playAllAudioRef.current = new Audio();
     }
+
     const a = playAllAudioRef.current;
     a.src = api.audioUrl(id, s.audio_file, s.audio_key);
     a.currentTime = 0;
 
     a.ontimeupdate = () => {
+      if (stopRequestedRef.current) return;
       setPlayCurrentTime(a.currentTime);
       setPlayDuration(a.duration || s.audio_duration || 0);
     };
 
     a.onended = () => {
+      if (stopRequestedRef.current) return;
       const next = findNextPlayable(index + 1);
       if (next !== -1) {
         playSceneAudio(next);
@@ -303,6 +321,7 @@ export default function AudioView({ project, setProject }) {
     };
 
     a.onerror = () => {
+      if (stopRequestedRef.current) return;
       const next = findNextPlayable(index + 1);
       if (next !== -1) {
         playSceneAudio(next);
@@ -318,8 +337,10 @@ export default function AudioView({ project, setProject }) {
     setPlayDuration(s.audio_duration || 0);
 
     a.play().catch((err) => {
-      console.warn("Playback error:", err);
-      setIsPlaying(false);
+      if (!stopRequestedRef.current) {
+        console.warn("Playback error:", err);
+        setIsPlaying(false);
+      }
     });
 
     // Auto-scroll to currently playing scene
@@ -330,6 +351,7 @@ export default function AudioView({ project, setProject }) {
   };
 
   const startPlayAll = (fromIndex = 0) => {
+    stopRequestedRef.current = false;
     const target = findNextPlayable(fromIndex);
     if (target === -1) {
       dialog.alert({
@@ -352,11 +374,13 @@ export default function AudioView({ project, setProject }) {
       a.pause();
       setIsPlaying(false);
     } else {
+      stopRequestedRef.current = false;
       a.play().then(() => setIsPlaying(true)).catch(() => {});
     }
   };
 
   const playNextScene = () => {
+    stopRequestedRef.current = false;
     if (currentPlayingIndex === null) return;
     const next = findNextPlayable(currentPlayingIndex + 1);
     if (next !== -1) {
@@ -365,6 +389,7 @@ export default function AudioView({ project, setProject }) {
   };
 
   const playPrevScene = () => {
+    stopRequestedRef.current = false;
     if (currentPlayingIndex === null) return;
     const prev = findPrevPlayable(currentPlayingIndex);
     if (prev !== -1) {

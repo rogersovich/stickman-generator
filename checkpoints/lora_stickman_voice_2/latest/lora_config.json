@@ -1,0 +1,29 @@
+{
+  "base_model": "D:/Coding/Python/manhwa-recap-studio/models/checkpoints/hf_cache/models--openbmb--VoxCPM2/snapshots/32279effe8c19989596f05d353d1447f51d9e915",
+  "lora_config": {
+    "enable_lm": true,
+    "enable_dit": true,
+    "enable_proj": false,
+    "r": 32,
+    "alpha": 32,
+    "dropout": 0.0,
+    "target_modules_lm": [
+      "q_proj",
+      "v_proj",
+      "k_proj",
+      "o_proj"
+    ],
+    "target_modules_dit": [
+      "q_proj",
+      "v_proj",
+      "k_proj",
+      "o_proj"
+    ],
+    "target_proj_modules": [
+      "enc_to_lm_proj",
+      "lm_to_dit_proj",
+      "res_to_dit_proj",
+      "fusion_concat_proj"
+    ]
+  }
+}

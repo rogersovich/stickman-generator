@@ -35,10 +35,15 @@ def run_job(client: Client, job: dict, device: str) -> None:
 
     # LoRA integration for VoxCPM2
     lora_target = job.get("lora_path")
-    if not lora_target and job.get("voice_id") == "suara-1":
-        default_lora = settings.WORKER_DIR.parent / "checkpoints" / "lora_stickman_voice" / "latest"
-        if (default_lora / "lora_weights.safetensors").is_file():
-            lora_target = str(default_lora)
+    if not lora_target:
+        if job.get("voice_id") == "suara-1":
+            default_lora = settings.WORKER_DIR.parent / "checkpoints" / "lora_stickman_voice" / "latest"
+            if (default_lora / "lora_weights.safetensors").is_file():
+                lora_target = str(default_lora)
+        elif job.get("voice_id") == "suara-2":
+            default_lora = settings.WORKER_DIR.parent / "checkpoints" / "lora_stickman_voice_2" / "latest"
+            if (default_lora / "lora_weights.safetensors").is_file():
+                lora_target = str(default_lora)
     if hasattr(engine, "set_lora") and lora_target:
         lora_scale = float(job.get("lora_scale") or job.get("params", {}).get("lora_scale", 0.7))
         engine.set_lora(lora_target, lora_scale)

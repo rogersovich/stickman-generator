@@ -65,5 +65,13 @@ output/*
 
 # Checkpoint training artifacts (keep latest safetensors, ignore heavy training states)
 *.pth
+*.pt
 checkpoints/**/step_*
 checkpoints/**/logs/
+
+# Raw training audio, datasets & slices
+data/raw*/
+data/*dataset*/
+data/datasets/
+data/**/sample*.wav
+
