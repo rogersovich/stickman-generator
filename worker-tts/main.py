@@ -3,6 +3,7 @@
 Run: worker-tts/.venv-ml/bin/python worker-tts/main.py   (Windows: worker-tts\\run-worker.bat)
 """
 
+import os
 import threading
 import time
 
@@ -76,20 +77,16 @@ def run_job(client: Client, job: dict, device: str) -> None:
         except Exception:
             pass
 
+        inline_audit = os.environ.get("TTS_INLINE_AUDIT", "1").lower() not in ("0", "false", "no")
+
         if len(scene_indices) > 1:
             from splitter import align_and_slice
-            slices = align_and_slice(wave, engine.sr, scene_texts, job.get("lang", "id"))
-            for s_idx, s_key, s_text, s_wave in zip(scene_indices, scene_keys, scene_texts, slices):
+            slices, slice_transcripts = align_and_slice(wave, engine.sr, scene_texts, job.get("lang", "id"), return_transcripts=True)
+            for s_idx, s_key, s_text, s_wave, s_trans in zip(scene_indices, scene_keys, scene_texts, slices, slice_transcripts):
                 audit_res = None
-                if model_whisper:
+                if inline_audit and s_trans:
                     try:
-                        import io, soundfile as sf
-                        buf = io.BytesIO()
-                        sf.write(buf, s_wave, engine.sr, format="WAV")
-                        buf.seek(0)
-                        segs, _ = model_whisper.transcribe(buf, language=job.get("lang", "id"))
-                        tr = " ".join(s.text for s in segs).strip()
-                        audit_res = tts_audit.audit_transcription(s_text, tr)
+                        audit_res = tts_audit.audit_transcription(s_text, s_trans)
                     except Exception:
                         pass
                 client.put_result(job["project_id"], s_idx, s_key, to_wav_bytes(s_wave, engine.sr), audit=audit_res)
@@ -98,7 +95,7 @@ def run_job(client: Client, job: dict, device: str) -> None:
             log(f"{label} {job['model']} Group of {len(scene_indices)} scenes ({len(wave) / engine.sr:.1f}s total) in {time.perf_counter() - t0:.1f}s ({device})")
         else:
             audit_res = None
-            if model_whisper:
+            if model_whisper and inline_audit:
                 try:
                     import io, soundfile as sf
                     buf = io.BytesIO()

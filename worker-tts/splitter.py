@@ -108,7 +108,7 @@ def slice_with_fades(audio: np.ndarray, sr: int, cuts: list[float], fade_in_ms: 
     return slices
 
 
-def fallback_proportional_slice(audio: np.ndarray, sr: int, scene_texts: list[str]) -> list[np.ndarray]:
+def fallback_proportional_slice(audio: np.ndarray, sr: int, scene_texts: list[str], return_transcripts: bool = False):
     """Fallback slice based on character counts if alignment fails."""
     lengths = [max(1, len(t.strip())) for t in scene_texts]
     total_len = sum(lengths)
@@ -119,13 +119,16 @@ def fallback_proportional_slice(audio: np.ndarray, sr: int, scene_texts: list[st
         accum += (l / total_len) * total_dur
         cuts.append(accum)
     cuts.append(total_dur)
-    return slice_with_fades(audio, sr, cuts)
+    slices = slice_with_fades(audio, sr, cuts)
+    if return_transcripts:
+        return slices, ["" for _ in scene_texts]
+    return slices
 
 
-def align_and_slice(audio: np.ndarray, sr: int, scene_texts: list[str], lang: str = "id") -> list[np.ndarray]:
+def align_and_slice(audio: np.ndarray, sr: int, scene_texts: list[str], lang: str = "id", return_transcripts: bool = False):
     """Align whisper word timestamps to scene texts and split the combined audio."""
     if len(scene_texts) <= 1:
-        return [audio]
+        return (([audio], [""]) if return_transcripts else [audio])
 
     total_dur = len(audio) / sr
 
@@ -157,7 +160,7 @@ def align_and_slice(audio: np.ndarray, sr: int, scene_texts: list[str], lang: st
 
         if not whisper_words:
             print("[splitter] Whisper did not detect words, using fallback slice", flush=True)
-            return fallback_proportional_slice(audio, sr, scene_texts)
+            return fallback_proportional_slice(audio, sr, scene_texts, return_transcripts=return_transcripts)
 
         # Build cumulative clean character streams for target scenes and whisper words
         scene_char_ends = []
@@ -168,7 +171,7 @@ def align_and_slice(audio: np.ndarray, sr: int, scene_texts: list[str], lang: st
             scene_char_ends.append(len(target_clean))
 
         if not target_clean:
-            return fallback_proportional_slice(audio, sr, scene_texts)
+            return fallback_proportional_slice(audio, sr, scene_texts, return_transcripts=return_transcripts)
 
         whisper_clean = ""
         whisper_spans = []
@@ -180,7 +183,7 @@ def align_and_slice(audio: np.ndarray, sr: int, scene_texts: list[str], lang: st
             whisper_spans.append((st, en, w))
 
         if not whisper_clean:
-            return fallback_proportional_slice(audio, sr, scene_texts)
+            return fallback_proportional_slice(audio, sr, scene_texts, return_transcripts=return_transcripts)
 
         # Match character streams using SequenceMatcher (immune to word-splitting/compounding variations)
         matcher = difflib.SequenceMatcher(None, target_clean, whisper_clean)
@@ -242,9 +245,21 @@ def align_and_slice(audio: np.ndarray, sr: int, scene_texts: list[str], lang: st
             prev_cut = cut
 
         cut_points.append(total_dur)
-        return slice_with_fades(audio, sr, cut_points)
+        slices = slice_with_fades(audio, sr, cut_points)
+        if return_transcripts:
+            slice_transcripts = []
+            for i in range(len(cut_points) - 1):
+                t_start = cut_points[i]
+                t_end = cut_points[i + 1]
+                words_in_slice = [
+                    w["raw"] for w in whisper_words
+                    if t_start - 0.08 <= (w["start"] + w["end"]) / 2.0 <= t_end + 0.08
+                ]
+                slice_transcripts.append(" ".join(words_in_slice).strip())
+            return slices, slice_transcripts
+        return slices
 
     except Exception as e:
         print(f"[splitter] Alignment error: {e}, using fallback slice", flush=True)
-        return fallback_proportional_slice(audio, sr, scene_texts)
+        return fallback_proportional_slice(audio, sr, scene_texts, return_transcripts=return_transcripts)
 
