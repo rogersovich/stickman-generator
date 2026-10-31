@@ -305,7 +305,14 @@ def set_narration(project_id: str, index: int, body: NarrationIn):
         p = _get(project_id)
         if not 0 <= index < len(p.scenes):
             raise HTTPException(404, "scene not found")
-        p.scenes[index].narration = body.narration.strip()
+        new_narr = body.narration.strip()
+        scene = p.scenes[index]
+        if scene.narration != new_narr:
+            scene.narration = new_narr
+            scene.audio_audit_score = None
+            scene.audio_audit_status = None
+            scene.audio_audit_text = None
+            scene.audio_audit_issues = []
         storage.save(p)
         return _out(p)
 

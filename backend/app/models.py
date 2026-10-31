@@ -38,6 +38,7 @@ class Scene(BaseModel):
     audio_error: str | None = None
     audio_seed: int | None = None
     audio_key: str | None = None  # narration+voice+model the clip was made from (detects stale audio)
+    group_audio_key: str | None = None  # key of the continuous group audio if this is the first scene of a group
     audio_started_at: str | None = None
     audio_worker: str | None = None
     # audio audit (Whisper consistency verification)

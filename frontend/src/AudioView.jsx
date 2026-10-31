@@ -519,7 +519,9 @@ export default function AudioView({ project, setProject }) {
 
     const a = playAllAudioRef.current;
     const isGroupedPlay = (s.sentence_group_size ?? 1) > 1;
-    const cacheTag = `${s.audio_key || ""}_${project.updated_at || ""}`;
+    const cacheTag = isGroupedPlay
+      ? `${s.sentence_group_key || s.audio_key || ""}_${project.updated_at || ""}`
+      : `${s.audio_key || ""}_${project.updated_at || ""}`;
     const audioSrc = isGroupedPlay && s.sentence_group_audio
       ? api.audioUrl(id, s.sentence_group_audio, cacheTag)
       : api.audioUrl(id, s.audio_file, cacheTag);
@@ -981,7 +983,7 @@ export default function AudioView({ project, setProject }) {
                         <audio
                           controls
                           preload="none"
-                          src={api.audioUrl(id, s.sentence_group_audio, `${s.audio_key || ""}_${project.updated_at || ""}`)}
+                          src={api.audioUrl(id, s.sentence_group_audio, `${s.sentence_group_key || s.audio_key || ""}_${project.updated_at || ""}`)}
                           className="h-8 min-w-0 flex-1"
                           onPlay={() => {
                             if (playingAll) stopPlayAll();

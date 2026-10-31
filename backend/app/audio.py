@@ -120,6 +120,10 @@ def enqueue(project_id: str, mode: Literal["missing", "all"], indices: list[int]
                 continue
             if mode == "all" or s.audio_status in ("pending", "failed", "generating") or is_stale(p, s) or (indices is not None and i in targets):
                 s.audio_status, s.audio_error = "queued", None
+                s.audio_audit_score = None
+                s.audio_audit_status = None
+                s.audio_audit_text = None
+                s.audio_audit_issues = []
 
         # Ensure all members of affected sentence groups are queued together
         queued_indices = {i for i, s in enumerate(p.scenes) if s.audio_status == "queued"}
@@ -128,6 +132,10 @@ def enqueue(project_id: str, mode: Literal["missing", "all"], indices: list[int]
                 m_scene = p.scenes[m]
                 if m_scene.narration.strip():
                     m_scene.audio_status, m_scene.audio_error = "queued", None
+                    m_scene.audio_audit_score = None
+                    m_scene.audio_audit_status = None
+                    m_scene.audio_audit_text = None
+                    m_scene.audio_audit_issues = []
                     _leases.pop((p.id, m), None)
 
         storage.save(p)
@@ -152,6 +160,11 @@ def cancel(project_id: str, indices: list[int] | None = None) -> Project:
             if s.audio_status in ("queued", "generating"):
                 s.audio_status = "done" if s.audio_file and not is_stale(p, s) else "pending"
                 s.audio_error = None
+                if s.audio_status == "pending":
+                    s.audio_audit_score = None
+                    s.audio_audit_status = None
+                    s.audio_audit_text = None
+                    s.audio_audit_issues = []
             _leases.pop((project_id, i), None)
         storage.save(p)
         return p
@@ -297,7 +310,7 @@ def save_group_result(project_id: str, index: int, name: str, key: str, data: by
             except Exception:
                 pass
         if 0 <= index < len(p.scenes):
-            p.scenes[index].audio_key = key
+            p.scenes[index].group_audio_key = key
         storage.save(p)
         return p
 
@@ -334,6 +347,11 @@ def save_result(project_id: str, index: int, name: str, key: str, data: bytes, a
             s.audio_audit_status = audit_data.get("status")
             s.audio_audit_text = audit_data.get("transcribed")
             s.audio_audit_issues = audit_data.get("issues", [])
+        else:
+            s.audio_audit_score = None
+            s.audio_audit_status = None
+            s.audio_audit_text = None
+            s.audio_audit_issues = []
         storage.save(p)
         return p
 
