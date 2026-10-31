@@ -172,9 +172,16 @@ do_check_gdrive() {
   echo ""
   echo ">> Memeriksa folder di Google Drive ($GDRIVE_BACKUP_DESTINATION)..."
   echo "Akun: $GDRIVE_EMAIL"
-  rclone size "$GDRIVE_BACKUP_DESTINATION" --config "$CONFIG_ABS"
-  echo ""
-  rclone lsd "$GDRIVE_BACKUP_DESTINATION" --config "$CONFIG_ABS"
+  sizeOutput=$(rclone size "$GDRIVE_BACKUP_DESTINATION" --config "$CONFIG_ABS" 2>&1 || true)
+  if echo "$sizeOutput" | grep -q "directory not found"; then
+    echo ""
+    echo "[INFO] Folder '$GDRIVE_FOLDER_NAME' belum ada di Google Drive karena Anda belum pernah melakukan backup."
+    echo "Folder ini akan OTOMATIS dibuat oleh rclone saat Anda menjalankan menu [1] atau [2]."
+  else
+    echo "$sizeOutput"
+    echo ""
+    rclone lsd "$GDRIVE_BACKUP_DESTINATION" --config "$CONFIG_ABS" || true
+  fi
 }
 
 # Mode dari parameter baris perintah

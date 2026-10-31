@@ -217,9 +217,18 @@ function Do-CheckGDrive {
     Write-Host ""
     Write-Host ">> Memeriksa folder di Google Drive ($GDriveDest)..." -ForegroundColor Cyan
     Write-Host "Akun: $GDriveEmail" -ForegroundColor Yellow
-    & rclone size $GDriveDest --config $ConfigPathAbs
-    Write-Host ""
-    & rclone lsd $GDriveDest --config $ConfigPathAbs
+    
+    $sizeOutput = & rclone size $GDriveDest --config $ConfigPathAbs 2>&1
+    $sizeText = [string]::Join("`n", $sizeOutput)
+    if ($sizeText -match "directory not found") {
+        Write-Host ""
+        Write-Host "[INFO] Folder '$FolderName' belum ada di Google Drive karena Anda belum pernah melakukan backup." -ForegroundColor Yellow
+        Write-Host "Folder ini akan OTOMATIS dibuat oleh rclone saat Anda menjalankan menu [1] atau [2]." -ForegroundColor Green
+    } else {
+        Write-Host $sizeText
+        Write-Host ""
+        & rclone lsd $GDriveDest --config $ConfigPathAbs
+    }
 }
 
 # Mode execution or Interactive Menu
