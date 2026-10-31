@@ -130,14 +130,31 @@ def enqueue(project_id: str, mode: Literal["missing", "all"], indices: list[int]
         return p
 
 
-def pause(project_id: str) -> Project:
+def cancel(project_id: str, indices: list[int] | None = None) -> Project:
     with storage.lock:
         p = _load(project_id)
-        for s in p.scenes:
-            if s.audio_status == "queued":
-                s.audio_status = "pending"
+        group_map = get_scene_group_map(p.scenes)
+        if indices is None:
+            targets = list(range(len(p.scenes)))
+        else:
+            expanded = set()
+            for i in indices:
+                if 0 <= i < len(p.scenes):
+                    expanded.update(group_map.get(i, [i]))
+            targets = sorted(expanded)
+
+        for i in targets:
+            s = p.scenes[i]
+            if s.audio_status in ("queued", "generating"):
+                s.audio_status = "done" if s.audio_file and not is_stale(p, s) else "pending"
+                s.audio_error = None
+            _leases.pop((project_id, i), None)
         storage.save(p)
         return p
+
+
+def pause(project_id: str) -> Project:
+    return cancel(project_id)
 
 
 def heartbeat(name: str, models: list[str], device: str, is_local: bool) -> None:

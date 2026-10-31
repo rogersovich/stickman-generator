@@ -1,3 +1,4 @@
+import threading
 """Cloudflare D1 Client for Stickman Generator."""
 
 import json
@@ -136,17 +137,25 @@ def save_project(project: Project) -> None:
         data_json,
     ])
 
-    # Batch insert scenes in chunks of 20 to avoid hundreds of sequential HTTP calls
-    chunk_size = 20
-    for chunk_start in range(0, len(project.scenes), chunk_size):
-        chunk = project.scenes[chunk_start:chunk_start + chunk_size]
+    # Sync scenes in background thread with chunk_size=4 (80 SQL variables, safely under D1's 100 limit)
+    threading.Thread(
+        target=_sync_scenes_chunked,
+        args=(project.id, list(project.scenes), project.updated_at),
+        daemon=True,
+    ).start()
+
+
+def _sync_scenes_chunked(project_id: str, scenes: list, updated_at: str) -> None:
+    chunk_size = 4
+    for chunk_start in range(0, len(scenes), chunk_size):
+        chunk = scenes[chunk_start:chunk_start + chunk_size]
         placeholders = []
         params = []
         for offset, s in enumerate(chunk):
             idx = chunk_start + offset
             placeholders.append("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             params.extend([
-                project.id,
+                project_id,
                 idx,
                 s.narration,
                 s.prompt,
@@ -165,9 +174,9 @@ def save_project(project: Project) -> None:
                 s.job_kind,
                 1 if s.is_merged else 0,
                 s.merged_with,
-                project.updated_at,
+                updated_at,
             ])
-        
+
         sql = f"""
             INSERT INTO scenes (
                 project_id, scene_index, narration, prompt, tag, title_text,
@@ -196,7 +205,10 @@ def save_project(project: Project) -> None:
                 merged_with = excluded.merged_with,
                 updated_at = excluded.updated_at
         """
-        _query_d1(sql, params)
+        try:
+            _query_d1(sql, params)
+        except Exception as e:
+            logger.warning(f"Failed to sync scene chunk {chunk_start} to D1: {e}")
 
 
 def load_project(project_id: str) -> Optional[Project]:
@@ -237,4 +249,3 @@ def count_projects() -> int:
         return 0
     rows = _query_d1("SELECT COUNT(*) as count FROM projects")
     return int(rows[0].get("count", 0)) if rows else 0
-

@@ -141,6 +141,10 @@ class AudioGenerateIn(BaseModel):
     indices: list[int] | None = None
 
 
+class AudioCancelIn(BaseModel):
+    indices: list[int] | None = None
+
+
 class SfxIn(BaseModel):
     audio_base64: str
     filename: str = "sfx.wav"

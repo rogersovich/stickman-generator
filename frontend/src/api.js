@@ -50,6 +50,7 @@ export const api = {
   setProjectTts: (id, data) => request("PUT", `/api/projects/${id}/tts`, data),
   generateAudio: (id, data) => request("POST", `/api/projects/${id}/audio/generate`, data),
   pauseAudio: (id) => request("POST", `/api/projects/${id}/audio/pause`),
+  cancelAudio: (id, indices = null) => request("POST", `/api/projects/${id}/audio/cancel`, { indices }),
   ttsStatus: () => request("GET", "/api/tts/status"),
   audioUrl: (id, file, v) => `/files/${id}/${file}?v=${encodeURIComponent(v ?? "")}`,
   downloadUrl: (id) => `/api/projects/${id}/download`,

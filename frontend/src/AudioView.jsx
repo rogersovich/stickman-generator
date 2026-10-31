@@ -526,9 +526,14 @@ export default function AudioView({ project, setProject }) {
               </button>
             )}
 
-            {queued > 0 && (
-              <button className="btn-ghost text-xs" onClick={() => act(() => api.pauseAudio(id))}>
-                <Pause size={14} className="text-amber-400" /> Jeda ({queued} antre)
+            {busy && (
+              <button
+                className="rounded-md border border-red-500/50 bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/30 hover:border-red-500/70 hover:text-white flex items-center gap-1.5 transition shadow-sm"
+                onClick={() => act(() => api.cancelAudio(id))}
+                title="Batalkan proses generate audio dan antrean"
+              >
+                <X size={14} />
+                <span>Batal Generate ({generating + queued})</span>
               </button>
             )}
             <button
@@ -654,14 +659,27 @@ export default function AudioView({ project, setProject }) {
                       (Scene #{groupScenes[0] + 1} – #{groupScenes[groupScenes.length - 1] + 1} · {s.sentence_group_size} scene digabung saat TTS)
                     </span>
                   </div>
-                  <button
-                    className="btn-ghost px-2 py-0.5 text-[10px] text-amber-300 hover:text-white hover:bg-amber-500/20 flex items-center gap-1 border border-amber-500/30 rounded transition"
-                    onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: groupScenes }))}
-                    title="Generate ulang seluruh kalimat ini bersamaan"
-                  >
-                    <RotateCcw size={10} />
-                    <span>Generate Grup</span>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {groupScenes.some(idx => scenes[idx]?.audio_status === 'generating' || scenes[idx]?.audio_status === 'queued') ? (
+                      <button
+                        className="btn-ghost px-2 py-0.5 text-[10px] text-red-300 hover:text-white hover:bg-red-500/20 flex items-center gap-1 border border-red-500/40 rounded transition"
+                        onClick={() => act(() => api.cancelAudio(id, groupScenes))}
+                        title="Batalkan generate seluruh kalimat ini"
+                      >
+                        <X size={10} />
+                        <span>Batal Grup</span>
+                      </button>
+                    ) : (
+                      <button
+                        className="btn-ghost px-2 py-0.5 text-[10px] text-amber-300 hover:text-white hover:bg-amber-500/20 flex items-center gap-1 border border-amber-500/30 rounded transition"
+                        onClick={() => act(() => api.generateAudio(id, { mode: "all", indices: groupScenes }))}
+                        title="Generate ulang seluruh kalimat ini bersamaan"
+                      >
+                        <RotateCcw size={10} />
+                        <span>Generate Grup</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
               <li
@@ -759,13 +777,34 @@ export default function AudioView({ project, setProject }) {
                 )}
 
                 {s.audio_status === "generating" ? (
-                  <button
-                    className="btn-ghost px-2.5 py-1 text-[11px] text-amber-300 opacity-80 cursor-wait flex items-center gap-1.5"
-                    disabled
-                  >
-                    <Loader2 size={12} className="animate-spin text-amber-400" />
-                    <span>Memproses...</span>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      className="btn-ghost px-2.5 py-1 text-[11px] text-amber-300 opacity-80 cursor-wait flex items-center gap-1.5"
+                      disabled
+                    >
+                      <Loader2 size={12} className="animate-spin text-amber-400" />
+                      <span>Memproses...</span>
+                    </button>
+                    <button
+                      className="rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-300 hover:bg-red-500/25 hover:text-white flex items-center gap-1 transition"
+                      onClick={() => act(() => api.cancelAudio(id, isGrouped ? groupScenes : [i]))}
+                      title={isGrouped ? "Batalkan generate grup ini" : "Batalkan generate scene ini"}
+                    >
+                      <X size={11} />
+                      <span>Batal</span>
+                    </button>
+                  </div>
+                ) : s.audio_status === "queued" ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      className="rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-300 hover:bg-red-500/25 hover:text-white flex items-center gap-1 transition font-medium"
+                      onClick={() => act(() => api.cancelAudio(id, isGrouped ? groupScenes : [i]))}
+                      title={isGrouped ? "Batalkan antrean grup ini" : "Batalkan antrean scene ini"}
+                    >
+                      <X size={12} />
+                      <span>Batal Antre</span>
+                    </button>
+                  </div>
                 ) : s.audio_file && s.audio_status === "done" && !s.audio_stale ? (
                   <button
                     className="btn-ghost px-2.5 py-1 text-[11px] text-slate-300 hover:text-white flex items-center gap-1.5 transition"

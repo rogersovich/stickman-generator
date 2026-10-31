@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import audio, config, storage, voices
-from .models import AudioGenerateIn, ProjectTtsIn, VoiceIn, VoiceSpeedIn, WorkerFailIn, WorkerHelloIn
+from .models import AudioCancelIn, AudioGenerateIn, ProjectTtsIn, VoiceIn, VoiceSpeedIn, WorkerFailIn, WorkerHelloIn
 from .serialize import project_out
 
 router = APIRouter()
@@ -125,6 +125,12 @@ def generate_audio(project_id: str, body: AudioGenerateIn):
 @router.post("/api/projects/{project_id}/audio/pause")
 def pause_audio(project_id: str):
     return project_out(_errors(audio.pause, project_id))
+
+
+@router.post("/api/projects/{project_id}/audio/cancel")
+def cancel_audio(project_id: str, body: AudioCancelIn | None = None):
+    indices = body.indices if body else None
+    return project_out(_errors(audio.cancel, project_id, indices))
 
 
 @router.get("/api/tts/status")
