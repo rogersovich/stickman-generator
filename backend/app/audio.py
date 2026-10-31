@@ -175,14 +175,18 @@ def workers_status() -> list[dict]:
     ]
 
 
-def _allowed_models(models: list[str], is_local: bool) -> set[str]:
+def _allowed_models(models: list[str], is_local: bool, worker_device: str = "") -> set[str]:
     allowed = set(models)
     if is_local and config.TTS_WORKER_MODE == "remote":
         return set()
     if is_local and config.TTS_WORKER_MODE == "auto":
         for w in workers_status():
-            if w["online"] and not w["local"]:
+            if w["online"] and not w["local"] and "cuda" in w.get("device", "").lower():
                 allowed -= set(w["models"])
+    if not is_local and config.TTS_WORKER_MODE == "auto" and "cuda" not in worker_device.lower():
+        for w in workers_status():
+            if w["online"] and w["local"] and "cuda" in w.get("device", "").lower():
+                return set()
     return allowed
 
 
@@ -190,7 +194,7 @@ def claim(name: str, models: list[str], is_local: bool) -> dict | None:
     with storage.lock:
         reap()
         heartbeat(name, models, _workers.get(name, {}).get("device", ""), is_local)
-        allowed = _allowed_models(models, is_local)
+        allowed = _allowed_models(models, is_local, _workers.get(name, {}).get("device", ""))
         if not allowed:
             return None
         for p in sorted(storage.list_all(), key=lambda p: p.created_at):

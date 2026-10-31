@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 WORKER_DIR = Path(__file__).resolve().parent
 load_dotenv(WORKER_DIR / ".env")
 
+# MPS and CUDA memory allocator defaults before torch is ever imported
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.0")
+
 
 def _path(value: str, default: Path) -> Path:
     if not value:

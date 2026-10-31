@@ -241,6 +241,8 @@ class VoxCPM2Engine:
 
     def generate(self, text: str, seed: int, params: dict, lang: str) -> np.ndarray:
         _seed(self.torch, seed)
+        if not self.is_optimized:
+            free_memory(self.device)
         with _quiet(), self.torch.inference_mode():
             wav = self.model.generate(
                 text=text,

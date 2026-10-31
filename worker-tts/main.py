@@ -38,42 +38,48 @@ def run_job(client: Client, job: dict, device: str) -> None:
         label = f"[{job['project_id'][:24]} #{scene_indices[0] + 1}]"
 
     t0 = time.perf_counter()
-    engine = get_engine(job["model"])
-    engine.set_reference(reference_wav(client, job), job.get("voice_transcript") or "")
+    from device import free_memory
+    free_memory(device)
 
-    # LoRA integration for VoxCPM2
-    lora_target = job.get("lora_path")
-    if not lora_target:
-        if job.get("voice_id") == "suara-1":
-            default_lora = settings.WORKER_DIR.parent / "checkpoints" / "lora_stickman_voice" / "latest"
-            if (default_lora / "lora_weights.safetensors").is_file():
-                lora_target = str(default_lora)
-        elif job.get("voice_id") == "suara-2":
-            default_lora = settings.WORKER_DIR.parent / "checkpoints" / "lora_stickman_voice_2" / "latest"
-            if (default_lora / "lora_weights.safetensors").is_file():
-                lora_target = str(default_lora)
-    if hasattr(engine, "set_lora") and lora_target:
-        lora_scale = float(job.get("lora_scale") or job.get("params", {}).get("lora_scale", 0.7))
-        engine.set_lora(lora_target, lora_scale)
+    try:
+        engine = get_engine(job["model"])
+        engine.set_reference(reference_wav(client, job), job.get("voice_transcript") or "")
 
-    if "speed" in job:
-        job["params"]["speed"] = float(job["speed"])
-    pieces = prepare(job["text"], job["lang"], job["model"])
-    if not pieces:
-        raise ValueError("Narasi kosong")
-    waves = [engine.generate(p, job["seed"], job["params"], job["lang"]) for p in pieces]
-    wave = trim_silence(concat(waves, engine.sr), engine.sr)
+        # LoRA integration for VoxCPM2
+        lora_target = job.get("lora_path")
+        if not lora_target:
+            if job.get("voice_id") == "suara-1":
+                default_lora = settings.WORKER_DIR.parent / "checkpoints" / "lora_stickman_voice" / "latest"
+                if (default_lora / "lora_weights.safetensors").is_file():
+                    lora_target = str(default_lora)
+            elif job.get("voice_id") == "suara-2":
+                default_lora = settings.WORKER_DIR.parent / "checkpoints" / "lora_stickman_voice_2" / "latest"
+                if (default_lora / "lora_weights.safetensors").is_file():
+                    lora_target = str(default_lora)
+        if hasattr(engine, "set_lora") and lora_target:
+            lora_scale = float(job.get("lora_scale") or job.get("params", {}).get("lora_scale", 0.7))
+            engine.set_lora(lora_target, lora_scale)
 
-    if len(scene_indices) > 1:
-        from splitter import align_and_slice
-        slices = align_and_slice(wave, engine.sr, scene_texts, job.get("lang", "id"))
-        for s_idx, s_key, s_wave in zip(scene_indices, scene_keys, slices):
-            trimmed_slice = trim_silence(s_wave, engine.sr)
-            client.put_result(job["project_id"], s_idx, s_key, to_wav_bytes(trimmed_slice, engine.sr))
-        log(f"{label} {job['model']} Group of {len(scene_indices)} scenes ({len(wave) / engine.sr:.1f}s total) in {time.perf_counter() - t0:.1f}s ({device})")
-    else:
-        client.put_result(job["project_id"], scene_indices[0], scene_keys[0], to_wav_bytes(wave, engine.sr))
-        log(f"{label} {job['model']} {len(wave) / engine.sr:.1f}s audio in {time.perf_counter() - t0:.1f}s ({device})")
+        if "speed" in job:
+            job["params"]["speed"] = float(job["speed"])
+        pieces = prepare(job["text"], job["lang"], job["model"])
+        if not pieces:
+            raise ValueError("Narasi kosong")
+        waves = [engine.generate(p, job["seed"], job["params"], job["lang"]) for p in pieces]
+        wave = trim_silence(concat(waves, engine.sr), engine.sr)
+
+        if len(scene_indices) > 1:
+            from splitter import align_and_slice
+            slices = align_and_slice(wave, engine.sr, scene_texts, job.get("lang", "id"))
+            for s_idx, s_key, s_wave in zip(scene_indices, scene_keys, slices):
+                trimmed_slice = trim_silence(s_wave, engine.sr)
+                client.put_result(job["project_id"], s_idx, s_key, to_wav_bytes(trimmed_slice, engine.sr))
+            log(f"{label} {job['model']} Group of {len(scene_indices)} scenes ({len(wave) / engine.sr:.1f}s total) in {time.perf_counter() - t0:.1f}s ({device})")
+        else:
+            client.put_result(job["project_id"], scene_indices[0], scene_keys[0], to_wav_bytes(wave, engine.sr))
+            log(f"{label} {job['model']} {len(wave) / engine.sr:.1f}s audio in {time.perf_counter() - t0:.1f}s ({device})")
+    finally:
+        free_memory(device)
 
 
 def heartbeat_loop(client: Client, models: list[str], device: str, stop: threading.Event) -> None:

@@ -283,3 +283,11 @@ def test_enqueue_and_claim_sentence_group(proj, tmp_path, monkeypatch):
     # All 3 scenes should be generating
     reloaded = storage.load(p.id)
     assert [s.audio_status for s in reloaded.scenes] == ["generating", "generating", "generating", "pending"]
+
+
+def test_auto_mode_remote_mps_skips_when_local_cuda_online(proj, monkeypatch):
+    monkeypatch.setattr(config, "TTS_WORKER_MODE", "auto")
+    audio.enqueue(proj.id, "missing")
+    audio.heartbeat("win-gpu", ["omnivoice", "voxcpm2"], "NVIDIA GeForce RTX 3060 (CUDA)", True)
+    assert audio.claim("mac", ["omnivoice", "voxcpm2"], False) is None
+    assert audio.claim("win-gpu", ["omnivoice", "voxcpm2"], True)["scene_index"] == 0

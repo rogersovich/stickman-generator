@@ -179,6 +179,7 @@ export default function AudioView({ project, setProject }) {
   const done = scenes.filter((s) => s.audio_status === "done" && !s.audio_stale).length;
   const stale = scenes.filter((s) => s.audio_stale).length;
   const queued = scenes.filter((s) => s.audio_status === "queued").length;
+  const generating = scenes.filter((s) => s.audio_status === "generating").length;
   const totalSec = scenes.reduce((sum, s) => sum + (s.audio_status === "done" ? s.audio_duration ?? 0 : 0), 0);
   const failedNav = useFailedNav(
     scenes.flatMap((s, i) => (s.audio_status === "failed" ? [i] : [])),
