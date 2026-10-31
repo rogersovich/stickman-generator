@@ -1,8 +1,38 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Clock, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, Square, Trash2, Volume2, VolumeX, WandSparkles, X, Zap } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Clock, Columns2, Columns3, Columns4, Download, ExternalLink, FileArchive, Layers, Maximize2, Pause, Play, RotateCcw, Square, Trash2, Volume2, VolumeX, WandSparkles, X, Zap } from "lucide-react";
 import { api } from "./api.js";
+import FailedNav, { useFailedNav } from "./FailedNav.jsx";
 import NarrationEditor from "./NarrationEditor.jsx";
 import { useDialog } from "./ui.jsx";
+
+// Frame grid layouts (full class strings so Tailwind picks them up); phones always get fewer columns
+const GRID_COLS = {
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-2 lg:grid-cols-3",
+  4: "sm:grid-cols-3 lg:grid-cols-4",
+};
+const GRID_ICON = { 2: Columns2, 3: Columns3, 4: Columns4 };
+
+// Column choice is remembered per format: 16:9 and 9:16 frames read best at different sizes
+function useGridCols(format) {
+  const key = `stickman.gridCols.${format}`;
+  const fallback = format === "9:16" ? 4 : 2;
+  const [cols, setCols] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem(key));
+      return GRID_COLS[saved] ? saved : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+  const choose = (n) => {
+    setCols(n);
+    try {
+      localStorage.setItem(key, String(n));
+    } catch {}
+  };
+  return [cols, choose];
+}
 
 const BADGE = {
   pending: "bg-slate-800 text-slate-400 border border-slate-700/60",
@@ -13,9 +43,16 @@ const BADGE = {
 
 function SceneNote({ scene }) {
   if (!scene.error) return null;
-  const warn = scene.image_status === "done";
+  const done = scene.image_status === "done";
+  // a finished frame only warns when something went wrong (failed 2K download, low-res fallback)
+  const warn = done && /gagal|rendah/i.test(scene.error);
+  const tone = !done
+    ? "border-red-500/30 bg-red-500/10 text-red-300"
+    : warn
+    ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+    : "border-[#292e3b] bg-[#12141a] text-slate-400";
   return (
-    <p className={`rounded-lg px-2.5 py-1.5 text-xs break-words border ${warn ? "border-amber-500/30 bg-amber-500/10 text-amber-300" : "border-red-500/30 bg-red-500/10 text-red-300"}`}>
+    <p className={`rounded-lg px-2.5 py-1.5 text-xs break-words border ${tone}`}>
       {warn && <AlertTriangle size={13} className="mr-1 inline -translate-y-px" />}
       {scene.error}
     </p>
@@ -244,6 +281,14 @@ export default function ProgressView({ project, setProject }) {
   const vertical = project.format === "9:16";
   const act = (fn) => () => fn().then(setProject).catch((e) => dialog.alert({ title: "Aksi gagal", message: e.message }));
   const [narrationIndex, setNarrationIndex] = useState(null);
+  const [cols, setCols] = useGridCols(project.format);
+  const compact = cols === 4; // narrow cards: icon-only actions, shorter narration
+
+  const failedNav = useFailedNav(
+    project.scenes.flatMap((s, i) => (s.image_status === "failed" ? [i] : [])),
+    "scene-"
+  );
+  const flash = failedNav.flash;
 
   // Estimasi durasi selesai
   const remainingScenes = project.scenes.filter((s) => s.image_status !== "done" && !s.is_merged).length;
@@ -361,7 +406,15 @@ export default function ProgressView({ project, setProject }) {
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-400">
             <span>
               Progres Produksi: <b className="text-amber-400 font-semibold">{done}</b> / {project.scenes.length} frame selesai
-              {failed > 0 && <span className="text-red-400 ml-2">({failed} gagal)</span>}
+              {failed > 0 && (
+                <button
+                  className="ml-2 text-red-400 underline decoration-dotted underline-offset-2 hover:text-red-300"
+                  onClick={() => failedNav.goTo(1)}
+                  title="Lompat ke frame yang gagal"
+                >
+                  ({failed} gagal)
+                </button>
+              )}
             </span>
             <div className="flex items-center gap-3">
               {project.status === "generating" && remainingScenes > 0 && (
@@ -487,11 +540,39 @@ export default function ProgressView({ project, setProject }) {
       </div>
 
       {/* Frame Reel Grid */}
-      <div className={`grid items-start gap-4 ${vertical ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-1 sm:grid-cols-2"}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-mono text-xs text-slate-400">{project.scenes.length} frame</span>
+        <div className="flex items-center gap-1 rounded-lg border border-[#292e3b] bg-[#12141a] p-1" role="group" aria-label="Jumlah kolom">
+          {[2, 3, 4].map((n) => {
+            const Icon = GRID_ICON[n];
+            return (
+              <button
+                key={n}
+                onClick={() => setCols(n)}
+                aria-pressed={cols === n}
+                title={`${n} kolom`}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition ${
+                  cols === n ? "bg-amber-500/15 text-amber-300" : "text-slate-400 hover:bg-[#1e222b] hover:text-slate-200"
+                }`}
+              >
+                <Icon size={14} /> {n}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className={`grid items-start ${compact ? "gap-3" : "gap-4"} ${vertical ? "grid-cols-2" : "grid-cols-1"} ${GRID_COLS[cols]}`}>
         {project.scenes.map((s, i) => (
-          <div key={i} className="card overflow-hidden transition-all hover:border-[#3d4455] flex flex-col">
+          <div
+            key={i}
+            id={`scene-${i}`}
+            className={`card overflow-hidden transition-all hover:border-[#3d4455] flex flex-col scroll-mt-24 ${
+              flash === i ? "ring-2 ring-red-400 ring-offset-2 ring-offset-[#0f1117]" : s.image_status === "failed" ? "border-red-500/40" : ""
+            }`}
+          >
             <button
-              className={`${vertical ? "aspect-[9/16]" : "aspect-video"} group relative flex w-full items-center justify-center bg-[#12141a] border-b border-[#292e3b]`}
+              className={`${vertical ? "aspect-[9/16]" : "aspect-video"} group relative flex w-full items-center justify-center overflow-hidden bg-[#12141a] border-b border-[#292e3b]`}
               onClick={() => setPreview(i)}
             >
               {s.image_file ? (
@@ -524,7 +605,7 @@ export default function ProgressView({ project, setProject }) {
               )}
             </button>
 
-            <div className="flex flex-col flex-1 p-3.5 space-y-2.5 justify-between">
+            <div className={`flex flex-col flex-1 justify-between ${compact ? "p-2.5 space-y-2" : "p-3.5 space-y-2.5"}`}>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-xs font-bold text-slate-300">
@@ -538,9 +619,9 @@ export default function ProgressView({ project, setProject }) {
                       : s.job_kind === "redownload" && s.image_status !== "done"
                       ? `2K ${s.image_status}`
                       : s.image_status === "done"
-                      ? s.image_hd
-                        ? "2K HD"
-                        : "1K"
+                      ? s.image_res === "thumbnail"
+                        ? "THUMBNAIL"
+                        : s.image_res ?? "done"
                       : s.image_status}
                   </span>
                 </div>
@@ -551,7 +632,7 @@ export default function ProgressView({ project, setProject }) {
                   </div>
                 )}
 
-                <p className="text-xs leading-relaxed text-slate-300 line-clamp-3">{s.narration}</p>
+                <p className={`text-xs leading-relaxed text-slate-300 ${compact ? "line-clamp-2" : "line-clamp-3"}`}>{s.narration}</p>
                 <SceneNote scene={s} />
 
                 {/* Audio Player Card Bar */}
@@ -605,7 +686,7 @@ export default function ProgressView({ project, setProject }) {
                     onClick={() => setNarrationIndex(i)}
                     title="Ubah teks narasi"
                   >
-                    <WandSparkles size={12} className="text-amber-400" /> Narasi
+                    <WandSparkles size={12} className="text-amber-400" /> {!compact && "Narasi"}
                   </button>
                   {(s.image_status === "failed" || s.image_status === "done") && !s.is_merged && (
                     <button
@@ -613,7 +694,7 @@ export default function ProgressView({ project, setProject }) {
                       onClick={() => retry(i)}
                       title="Generate ulang di Flow"
                     >
-                      <RotateCcw size={12} /> {s.image_status === "failed" ? "Coba Lagi" : "Ulang"}
+                      <RotateCcw size={12} /> {!compact && (s.image_status === "failed" ? "Coba Lagi" : "Ulang")}
                     </button>
                   )}
                   {s.image_file && (
@@ -623,7 +704,7 @@ export default function ProgressView({ project, setProject }) {
                       download={`scene_${String(i + 1).padStart(3, "0")}.${s.image_file.split(".").pop()}`}
                       title={`Unduh file frame #${i + 1}`}
                     >
-                      <Download size={12} /> Unduh
+                      <Download size={12} /> {!compact && "Unduh"}
                     </a>
                   )}
                   {s.image_file && i < project.scenes.length - 1 && (
@@ -632,7 +713,7 @@ export default function ProgressView({ project, setProject }) {
                       onClick={() => handleSwap(i, i + 1)}
                       title={`Tukar gambar dengan Frame #${i + 2}`}
                     >
-                      <ArrowRightLeft size={12} /> Tukar #{i + 2}
+                      <ArrowRightLeft size={12} /> {compact ? `#${i + 2}` : `Tukar #${i + 2}`}
                     </button>
                   )}
                 </div>
@@ -646,6 +727,8 @@ export default function ProgressView({ project, setProject }) {
           </div>
         ))}
       </div>
+
+      <FailedNav nav={failedNav} />
 
       {preview !== null && (
         <Lightbox

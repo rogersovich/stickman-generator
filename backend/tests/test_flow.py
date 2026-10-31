@@ -365,3 +365,117 @@ prompt 4
     j4 = client.get("/api/jobs/next")
     assert j4.status_code == 200 and j4.json()["scene_index"] == 3
 
+
+
+def test_clear_images_ignores_orphaned_generating_scene(client):
+    from app import storage
+
+    p = client.post("/api/projects", json={"topic": "x", "scene_count": 2}).json()
+    client.post(f"/api/projects/{p['id']}/confirm")
+    client.get("/api/jobs/next")
+
+    # a job just handed out: the worker may still be on it
+    assert client.post(f"/api/projects/{p['id']}/clear-images").status_code == 409
+
+    # worker died without releasing the job long ago: nothing is running anymore
+    proj = storage.load(p["id"])
+    proj.scenes[0].started_at = "2020-01-01T00:00:00+00:00"
+    storage.save(proj)
+    r = client.post(f"/api/projects/{p['id']}/clear-images")
+    assert r.status_code == 200
+    assert all(s["image_status"] == "pending" for s in r.json()["scenes"])
+
+
+def _png(w, h):
+    import struct
+
+    return b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", w, h) + b"\x08\x02\x00\x00\x00"
+
+
+def _jpeg(w, h):
+    import struct
+
+    app0 = b"\xff\xe0" + struct.pack(">H", 16) + b"JFIF\x00" + bytes(9)
+    sof = b"\xff\xc0" + struct.pack(">HBHHB", 11, 8, h, w, 1) + bytes(3)
+    return b"\xff\xd8" + app0 + sof + b"\xff\xd9"
+
+
+@pytest.mark.parametrize(
+    "data, label",
+    [(_png(286, 512), "thumbnail"), (_png(1376, 768), "1K"), (_jpeg(768, 1376), "1K"), (_jpeg(2752, 1536), "2K")],
+)
+def test_scene_reports_real_resolution(client, data, label):
+    p = client.post("/api/projects", json={"topic": "x", "scene_count": 1}).json()
+    client.post(f"/api/projects/{p['id']}/confirm")
+    client.get("/api/jobs/next")
+    mime = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
+    client.post(f"/api/jobs/{p['id']}/0/result", json={"image_base64": base64.b64encode(data).decode(), "mime": mime})
+    assert client.get(f"/api/projects/{p['id']}").json()["scenes"][0]["image_res"] == label
+
+
+def test_files_rejects_backslash(client):
+    p = client.post("/api/projects", json={"topic": "x", "scene_count": 1}).json()
+    # on Windows "\\" is a path separator, so a name containing it could escape the project folder
+    (config.OUTPUT_DIR / p["id"] / "sub\\file.png").write_bytes(b"x")
+    assert client.get(f"/files/{p['id']}/sub%5Cfile.png").status_code == 404
+
+
+def test_export_capcut_draft(client, tmp_path):
+    from pathlib import Path
+    p = client.post("/api/projects", json={"topic": "Stickman Hero", "scene_count": 2}).json()
+    client.post(f"/api/projects/{p['id']}/confirm")
+    client.get("/api/jobs/next")
+    # Save image for scene 0
+    img_data = _png(1376, 768)
+    client.post(f"/api/jobs/{p['id']}/0/result", json={"image_base64": base64.b64encode(img_data).decode(), "mime": "image/png"})
+    
+    # Verify transitions listing endpoint
+    tr_res = client.get("/api/capcut/transitions")
+    assert tr_res.status_code == 200
+    assert len(tr_res.json()["transitions"]) == 13
+
+    # Export CapCut to tmp drafts dir with custom settings
+    drafts_dir = tmp_path / "capcut_drafts"
+    res = client.post(
+        f"/api/projects/{p['id']}/export-capcut",
+        json={
+            "drafts_dir": str(drafts_dir),
+            "enable_zoom": True,
+            "enable_pan": False,
+            "zoom_ratio": 1.25,
+            "enable_transitions": True,
+            "transition_duration": 0.35,
+            "allowed_transitions": ["Anime Speed", "Shake"],
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert data["exported_images"] == 1
+    assert Path(data["draft_path"]).exists()
+    assert (Path(data["draft_path"]) / "draft_info.json").exists()
+
+    # Verify project has saved export_opts and last_capcut_draft
+    p_after = client.get(f"/api/projects/{p['id']}").json()
+    assert p_after["last_capcut_draft"] is not None
+    assert p_after["last_capcut_draft"]["draft_name"] == data["draft_name"]
+    assert p_after["export_opts"] is not None
+    assert p_after["export_opts"]["zoom_ratio"] == 1.25
+
+    # Test explicit PUT /api/projects/{id}/export-opts
+    put_res = client.put(
+        f"/api/projects/{p['id']}/export-opts",
+        json={
+            "enable_zoom": True,
+            "enable_pan": True,
+            "zoom_ratio": 1.30,
+            "enable_transitions": True,
+            "transition_duration": 0.7,
+            "allowed_transitions": ["Anime Speed"],
+        },
+    )
+    assert put_res.status_code == 200
+    p_updated = put_res.json()
+    assert p_updated["export_opts"]["zoom_ratio"] == 1.30
+    assert p_updated["export_opts"]["transition_duration"] == 0.7
+

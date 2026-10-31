@@ -66,3 +66,21 @@ def has_d1() -> bool:
 def has_r2() -> bool:
     return bool(R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME and R2_ENDPOINT_URL)
 
+
+# narration audio (TTS)
+VOICES_DIR = _path(os.getenv("VOICES_DIR", "data/voices"))
+# custom sound effects for the CapCut export (built-in ones ship in backend/assets/sfx)
+SFX_DIR = _path(os.getenv("SFX_DIR", "data/sfx"))
+# shared secret for TTS workers on other machines; empty = only workers on this machine (localhost)
+TTS_WORKER_TOKEN = os.getenv("TTS_WORKER_TOKEN", "")
+# local: every worker takes jobs | auto: this machine's worker skips models an online remote worker has
+# remote: this machine's worker never takes jobs
+TTS_WORKER_MODE = os.getenv("TTS_WORKER_MODE", "auto")
+if TTS_WORKER_MODE not in ("local", "auto", "remote"):
+    TTS_WORKER_MODE = "auto"
+# voice library of manhwa-recap-studio, imported once from the voice library screen
+LEGACY_STUDIO_DB = Path(
+    os.path.expanduser(os.getenv("LEGACY_STUDIO_DB", "~/Documents/Coding/Python/manhwa-recap-studio/data/studio.db"))
+)
+TTS_LEASE_SECONDS = 120  # a generating scene goes back to the queue when its worker is silent this long
+TTS_SEEN_SECONDS = 30  # a worker counts as online when it called in this recently

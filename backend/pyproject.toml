@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.7",
     "python-dotenv>=1.0",
     "boto3>=1.43.123",
+    "pillow>=13.0.0",
 ]
 
 [dependency-groups]

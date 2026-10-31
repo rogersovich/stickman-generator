@@ -103,7 +103,7 @@ function render() {
 }
 
 $("openApp").onclick = () => chrome.tabs.create({ url: state.appUrl });
-$("openSettings").onclick = () => chrome.tabs.create({ url: `${state.appUrl}/#/settings` });
+$("openSettings").onclick = () => chrome.tabs.create({ url: `${state.appUrl}/settings` });
 $("openFlowTab").onclick = async () => {
   const currentTabs = await chrome.tabs.query({ url: ["https://flow.google.com/*", "https://labs.google/*"] });
   const activeUrl = currentTabs[0]?.url || "https://flow.google.com/";
@@ -115,19 +115,8 @@ $("openFlowTab").onclick = async () => {
 
 $("testTwoBtn").onclick = async () => {
   const s = await load();
-  try {
-    const res = await fetch(`${s.backendUrl}/api/settings`);
-    if (res.ok) {
-      const cfg = await res.json();
-      cfg.session_limit_images = 2;
-      await fetch(`${s.backendUrl}/api/settings`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(cfg),
-      });
-    }
-  } catch {}
-  await chrome.storage.local.set({ enabled: true, pausing: false });
+  // Run-only limit: the worker clears testLimit when it turns off, saved settings stay untouched
+  await chrome.storage.local.set({ testLimit: 2, enabled: true, pausing: false });
   const newLog = [...s.log, { t: Date.now(), level: "info", text: "🧪 Mode Test aktif: worker akan berhenti otomatis setelah 2 gambar." }];
   chrome.storage.local.set({ log: newLog });
 };
@@ -137,7 +126,7 @@ $("toggle").onclick = async () => {
   if (s.enabled) {
     await chrome.storage.local.set({ enabled: false, pausing: false });
   } else {
-    await chrome.storage.local.set({ enabled: true, pausing: false });
+    await chrome.storage.local.set({ enabled: true, pausing: false, testLimit: 0 });
     const tabs = await chrome.tabs.query({ url: ["https://flow.google.com/*", "https://labs.google/*"] });
     if (!tabs.length) {
       const log = [...s.log, { t: Date.now(), level: "warn", text: "Buka tab Google Flow dulu, lalu buka sebuah project" }];

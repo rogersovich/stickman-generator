@@ -5,24 +5,31 @@ import Home from "./Home.jsx";
 import ProjectPage from "./ProjectPage.jsx";
 import Settings from "./Settings.jsx";
 
-function useHashRoute() {
-  const [hash, setHash] = useState(window.location.hash);
+// Old links (bookmarks, extension notifications) used "#/p/<id>" and "#/settings": rewrite them once
+const legacy = window.location.hash.match(/^#(\/.*)$/)?.[1];
+if (legacy) window.history.replaceState(null, "", legacy.replace(/^\/p\//, "/project/"));
+
+function usePathRoute() {
+  const [path, setPath] = useState(window.location.pathname);
   useEffect(() => {
-    const onChange = () => setHash(window.location.hash);
-    window.addEventListener("hashchange", onChange);
-    return () => window.removeEventListener("hashchange", onChange);
+    const onChange = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", onChange);
+    return () => window.removeEventListener("popstate", onChange);
   }, []);
-  return hash;
+  return path;
 }
 
 export function go(path) {
-  window.location.hash = path;
+  if (path === window.location.pathname) return;
+  window.history.pushState(null, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  window.scrollTo(0, 0);
 }
 
 export default function App() {
-  const hash = useHashRoute();
-  const projectId = hash.match(/^#\/p\/([a-z0-9-]+)/)?.[1];
-  const onSettings = hash.startsWith("#/settings");
+  const path = usePathRoute();
+  const [, projectId, step = "images"] = path.match(/^\/project\/([a-z0-9-]+)(?:\/(images|audio|export))?/) ?? [];
+  const onSettings = path.startsWith("/settings");
   const [storage, setStorage] = useState(null);
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -32,7 +39,7 @@ export default function App() {
     fetchStorage();
     const interval = setInterval(fetchStorage, 15000);
     return () => clearInterval(interval);
-  }, [hash]);
+  }, [path]);
 
   const handleCopyRclone = () => {
     if (storage?.rclone_backup_command) {
@@ -43,7 +50,7 @@ export default function App() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className="mx-auto max-w-7xl px-4 py-8">
       <header className="mb-8 flex items-center justify-between border-b border-[#292e3b] pb-4">
         <div className="flex items-center gap-3">
           {(projectId || onSettings) && (
@@ -182,7 +189,7 @@ export default function App() {
         {onSettings ? (
           <Settings />
         ) : projectId ? (
-          <ProjectPage key={projectId} id={projectId} />
+          <ProjectPage key={projectId} id={projectId} step={step} />
         ) : (
           <Home />
         )}

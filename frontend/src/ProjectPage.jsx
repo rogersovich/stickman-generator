@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { api } from "./api.js";
+import AudioView from "./AudioView.jsx";
+import ExportView from "./ExportView.jsx";
 import { go } from "./App.jsx";
 import { confirmDelete } from "./deleteProject.js";
 import { useDialog } from "./ui.jsx";
 import DraftEditor from "./DraftEditor.jsx";
 import ProgressView from "./ProgressView.jsx";
+import ProjectSteps from "./ProjectSteps.jsx";
 
-export default function ProjectPage({ id }) {
+export default function ProjectPage({ id, step }) {
   const dialog = useDialog();
   const [project, setProject] = useState(null);
   const [error, setError] = useState("");
@@ -55,7 +58,16 @@ export default function ProjectPage({ id }) {
       {project.status === "draft" ? (
         <DraftEditor project={project} onConfirmed={setProject} />
       ) : (
-        <ProgressView project={project} setProject={setProject} />
+        <>
+          <ProjectSteps project={project} step={step} />
+          {step === "audio" ? (
+            <AudioView project={project} setProject={setProject} />
+          ) : step === "export" ? (
+            <ExportView project={project} setProject={setProject} />
+          ) : (
+            <ProgressView project={project} setProject={setProject} />
+          )}
+        </>
       )}
     </div>
   );

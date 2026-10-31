@@ -6,8 +6,9 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel
 
-from . import config, d1, db, jobs, r2, settings, storage, tts, voices
+from . import audio, config, d1, db, jobs, r2, routes_audio, routes_sfx, settings, storage, tts, voices
 from .models import (
     CreateProjectIn,
     ImportMarkdownIn,
@@ -22,6 +23,7 @@ from .models import (
     UpdateDraftIn,
 )
 from .parser import parse_markdown_prompts
+from .serialize import project_out as _out
 from .story import StoryError, generate_story, rewrite_narration, scene_count_for
 from .styles import build_prompt, load_styles
 
@@ -35,6 +37,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             import logging
             logging.getLogger("main").error(f"D1 init error: {e}")
+    audio.reset_on_startup()
     for p in storage.list_all():
         try:
             db.save_project_record(p)
@@ -52,6 +55,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware("http")(routes_audio.trusted_network)
+app.include_router(routes_audio.router)
+app.include_router(routes_sfx.router)
 
 
 def _get(project_id: str) -> Project:
@@ -64,21 +70,13 @@ def _get(project_id: str) -> Project:
     return p
 
 
-def _out(p: Project) -> dict:
-    """Project as JSON, plus whether each scene is still only a low-res thumbnail."""
-    data = p.model_dump()
-    for scene, out in zip(p.scenes, data["scenes"]):
-        out["needs_hd"] = jobs.needs_hd(p.id, scene)
-    return data
-
-
 @app.get("/files/{project_id}/{name}")
 def get_file(project_id: str, name: str):
     try:
         f = storage.project_dir(project_id) / name
     except ValueError:
         raise HTTPException(404)
-    if "/" in name or ".." in name:
+    if "/" in name or "\\" in name or ".." in name:
         raise HTTPException(404)
     if f.is_file():
         return FileResponse(f)
@@ -241,6 +239,8 @@ def delete_project(project_id: str):
     """Delete the project folder (project.json + all images)."""
     with storage.lock:
         p = _get(project_id)
+        # a worker that died mid-job never releases its scenes: don't let them block forever
+        jobs.expire_stale(p)
         if any(s.image_status == "generating" for s in p.scenes):
             raise HTTPException(409, "a scene is being generated right now: pause the project or turn the worker OFF first")
         storage.delete(project_id)
@@ -343,6 +343,8 @@ def resume(project_id: str):
 def clear_project_images(project_id: str):
     with storage.lock:
         p = _get(project_id)
+        # a worker that died mid-job never releases its scenes: don't let them block forever
+        jobs.expire_stale(p)
         if any(s.image_status == "generating" for s in p.scenes):
             raise HTTPException(409, "Ada scene yang sedang di-generate. Jeda dulu worker sebelum membersihkan gambar.")
         p = jobs.clear_images(project_id)
@@ -436,6 +438,8 @@ def download(project_id: str):
                 src_audio = d / s.audio_file
                 out_name = f"scene_{i + 1:03d}.wav"
                 z.write(src_audio, out_name)
+                if s.audio_file != out_name:
+                    z.write(src_audio, s.audio_file)
 
     buf.seek(0)
     return StreamingResponse(
@@ -446,10 +450,6 @@ def download(project_id: str):
 
 
 # ---------- Voices & TTS ----------
-
-@app.get("/api/voices")
-def get_voices():
-    return voices.list_voices()
 
 
 @app.post("/api/projects/{project_id}/generate-audio")
@@ -575,3 +575,67 @@ def post_release(project_id: str, index: int):
     except LookupError as e:
         raise HTTPException(404, str(e))
     return {"ok": True}
+
+
+class CapCutExportIn(BaseModel):
+    drafts_dir: str | None = None
+    project_name: str | None = None
+    ken_burns: bool = True
+    enable_zoom: bool = True
+    enable_pan: bool = True
+    zoom_ratio: float = 1.15
+    enable_transitions: bool = True
+    transition_duration: float = 0.5
+    allowed_transitions: list[str] | None = None
+    include_sfx: bool = True
+
+
+@app.get("/api/capcut/transitions")
+def get_capcut_transitions():
+    from .capcut_transitions import list_transitions
+    return {"transitions": list_transitions()}
+
+
+class ExportOptsIn(BaseModel):
+    ken_burns: bool = True
+    enable_zoom: bool = True
+    enable_pan: bool = True
+    zoom_ratio: float = 1.15
+    enable_transitions: bool = True
+    transition_duration: float = 0.5
+    allowed_transitions: list[str] | None = None
+    include_sfx: bool = True
+
+
+@app.put("/api/projects/{project_id}/export-opts")
+def save_export_opts(project_id: str, body: ExportOptsIn):
+    p = _get(project_id)
+    p.export_opts = body.model_dump()
+    storage.save(p)
+    return _out(p)
+
+
+@app.post("/api/projects/{project_id}/export-capcut")
+def export_capcut(project_id: str, body: CapCutExportIn = CapCutExportIn()):
+    try:
+        from .capcut_service import export_project_to_capcut
+        return export_project_to_capcut(
+            project_id=project_id,
+            drafts_dir=body.drafts_dir,
+            project_name=body.project_name,
+            ken_burns=body.ken_burns,
+            enable_zoom=body.enable_zoom,
+            enable_pan=body.enable_pan,
+            zoom_ratio=body.zoom_ratio,
+            enable_transitions=body.enable_transitions,
+            transition_duration=body.transition_duration,
+            allowed_transitions=body.allowed_transitions,
+            include_sfx=body.include_sfx,
+        )
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Gagal ekspor CapCut: {e}")
+

@@ -7,6 +7,9 @@ Format = Literal["9:16", "16:9"]
 ProjectStatus = Literal["draft", "generating", "paused", "done"]
 ImageStatus = Literal["pending", "generating", "done", "failed"]
 JobKind = Literal["generate", "redownload"]
+AudioStatus = Literal["pending", "queued", "generating", "done", "failed"]
+TtsModel = Literal["omnivoice", "voxcpm2"]
+SfxPos = Literal["start", "end"]
 
 
 def now_iso() -> str:
@@ -28,9 +31,18 @@ class Scene(BaseModel):
     started_at: str | None = None
     image_hd: bool | None = None  # True = full-res download from Flow, False = thumbnail, None = unknown (old data)
     job_kind: JobKind = "generate"  # "redownload" = fetch the full-res file of an existing Flow image
-    audio_status: Literal["idle", "generating", "done", "failed"] = "idle"
-    audio_file: str | None = None
+    # narration audio (step 2): one TTS clip per scene
+    audio_status: AudioStatus = "pending"
+    audio_file: str | None = None  # relative to the project folder, e.g. "audio/scene_001.wav"
+    audio_duration: float | None = None  # seconds, after leading/trailing silence is trimmed
     audio_error: str | None = None
+    audio_seed: int | None = None
+    audio_key: str | None = None  # narration+voice+model the clip was made from (detects stale audio)
+    audio_started_at: str | None = None
+    audio_worker: str | None = None
+    # sound effect on the CapCut timeline, played at the start or end of the scene
+    sfx_id: str | None = None
+    sfx_pos: SfxPos = "start"
 
 
 class Project(BaseModel):
@@ -44,10 +56,13 @@ class Project(BaseModel):
     style_id: str
     language: str = "Indonesia"
     status: ProjectStatus = "draft"
-    voice_id: str = "suara-1"
+    test_limit: int | None = None
+    voice_id: str | None = None  # None = default voice from settings
     voice_status: Literal["idle", "generating", "done", "failed"] = "idle"
     voice_error: str | None = None
-    test_limit: int | None = None
+    tts_model: TtsModel | None = None  # None = default model from settings
+    export_opts: dict | None = None  # CapCut / video export settings
+    last_capcut_draft: dict | None = None  # Record of last successful CapCut export
     scenes: list[Scene] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
@@ -113,4 +128,47 @@ class JobResultFileIn(BaseModel):
 
 
 class JobFailIn(BaseModel):
+    error: str = "unknown error"
+
+
+class ProjectTtsIn(BaseModel):
+    voice_id: str | None = None
+    tts_model: TtsModel | None = None
+
+
+class AudioGenerateIn(BaseModel):
+    mode: Literal["missing", "all"] = "missing"
+    indices: list[int] | None = None
+
+
+class SfxIn(BaseModel):
+    audio_base64: str
+    filename: str = "sfx.wav"
+    volume: float = Field(default=0.85, ge=0, le=1)
+
+
+class SfxUpdateIn(BaseModel):
+    label: str | None = Field(default=None, max_length=60)
+    volume: float | None = Field(default=None, ge=0, le=1)
+
+
+class SceneSfxIn(BaseModel):
+    sfx_id: str | None = None  # None = remove the scene's SFX
+    sfx_pos: SfxPos = "start"
+
+
+class VoiceIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    transcript: str = ""
+    audio_base64: str
+    filename: str = "ref.wav"
+
+
+class WorkerHelloIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    models: list[TtsModel] = Field(default_factory=list)
+    device: str = ""
+
+
+class WorkerFailIn(BaseModel):
     error: str = "unknown error"

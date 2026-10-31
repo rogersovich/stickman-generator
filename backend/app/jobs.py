@@ -3,7 +3,9 @@
 import base64
 import hashlib
 import shutil
+import struct
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 from . import config, db, r2, settings, storage
@@ -32,6 +34,56 @@ def needs_hd(project_id: str, scene: Scene) -> bool:
     return f.exists() and f.stat().st_size < LOW_RES_MAX_BYTES
 
 
+@lru_cache(maxsize=4096)
+def _image_size(path: str, _mtime_ns: int) -> tuple[int, int] | None:
+    """(width, height) read from a PNG / JPEG / WebP header; mtime is part of the cache key."""
+    with open(path, "rb") as f:
+        head = f.read(64 * 1024)
+    if head.startswith(b"\x89PNG") and len(head) >= 24:
+        return struct.unpack(">II", head[16:24])
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        if head[12:16] == b"VP8X":
+            return 1 + int.from_bytes(head[24:27], "little"), 1 + int.from_bytes(head[27:30], "little")
+        if head[12:16] == b"VP8 ":
+            w, h = struct.unpack("<HH", head[26:30])
+            return w & 0x3FFF, h & 0x3FFF
+        if head[12:16] == b"VP8L":
+            bits = int.from_bytes(head[21:25], "little")
+            return 1 + (bits & 0x3FFF), 1 + ((bits >> 14) & 0x3FFF)
+    if head.startswith(b"\xff\xd8"):
+        i = 2
+        while i + 9 < len(head):
+            if head[i] != 0xFF:
+                i += 1
+                continue
+            marker = head[i + 1]
+            if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7 or marker == 0xFF:
+                i += 2 if marker != 0xFF else 1
+                continue
+            length = struct.unpack(">H", head[i + 2 : i + 4])[0]
+            # SOF0..SOF15 hold the frame size (C4 = DHT, C8 = JPG, CC = DAC are not frames)
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                h, w = struct.unpack(">HH", head[i + 5 : i + 9])
+                return w, h
+            i += 2 + length
+    return None
+
+
+def image_res(project_id: str, scene: Scene) -> str | None:
+    """Label of the saved image's real size: "thumbnail", "1K" or "2K" (Flow 1K = 1376 px long side)."""
+    if not scene.image_file:
+        return None
+    f = storage.project_dir(project_id) / scene.image_file
+    try:
+        size = _image_size(str(f), f.stat().st_mtime_ns)
+    except OSError:
+        return None
+    if not size:
+        return None
+    long_side = max(size)
+    return "2K" if long_side >= 2000 else "1K" if long_side >= 1000 else "thumbnail"
+
+
 def _fail_scene(s: Scene, error: str) -> None:
     if s.job_kind == "redownload" and s.image_file:
         # the thumbnail is still there: keep the scene usable
@@ -41,7 +93,7 @@ def _fail_scene(s: Scene, error: str) -> None:
     s.job_kind = "generate"
 
 
-def _expire_stale(project: Project) -> bool:
+def expire_stale(project: Project) -> bool:
     changed = False
     cfg = settings.load()
     timeout = min(config.JOB_TIMEOUT_SECONDS, max(60.0, getattr(cfg, "image_timeout_sec", 180.0)))
@@ -73,7 +125,7 @@ def next_job() -> dict | None:
     with storage.lock:
         active = [p for p in storage.list_all() if p.status == "generating"]
         for p in active:
-            if _expire_stale(p):
+            if expire_stale(p):
                 _refresh_status(p)
                 storage.save(p)
         cfg = settings.load()

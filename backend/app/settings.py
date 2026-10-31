@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from . import config
+from .models import TtsModel
 
 SETTINGS_FILE = config.BACKEND_DIR / "settings.json"
 _lock = threading.Lock()
@@ -27,6 +28,19 @@ class Range(BaseModel):
 
 def _range(lo: float, hi: float):
     return Field(default_factory=lambda: Range(min=lo, max=hi))
+
+
+class OmniVoiceParams(BaseModel):
+    num_step: int = Field(16, ge=4, le=64)
+    guidance_scale: float = Field(3.0, ge=0, le=5)
+    t_shift: float = Field(0.1, ge=0, le=1)
+    speed: float = Field(1.0, ge=0.5, le=2)
+
+
+class VoxCPM2Params(BaseModel):
+    cfg_value: float = Field(2.5, ge=1, le=5)
+    inference_timesteps: int = Field(10, ge=4, le=50)
+    studio_clean: bool = True
 
 
 class AppSettings(BaseModel):
@@ -69,6 +83,12 @@ class AppSettings(BaseModel):
 
     # advanced
     image_timeout_sec: float = Field(240, ge=30, le=1800)
+
+    # narration audio (TTS): defaults, a project can override voice and model
+    tts_voice_id: str | None = None
+    tts_model: TtsModel = "omnivoice"
+    omnivoice: OmniVoiceParams = Field(default_factory=OmniVoiceParams)
+    voxcpm2: VoxCPM2Params = Field(default_factory=VoxCPM2Params)
 
 
 def load() -> AppSettings:

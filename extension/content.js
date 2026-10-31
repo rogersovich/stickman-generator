@@ -728,6 +728,8 @@ async function runJob(job, cfg) {
 
 let running = false;
 let inFlight = []; // [{ job, submittedAt }]
+let submitted = []; // every prompt sent from this tab, oldest first (null = failed send that still made a card)
+let cardCountBefore = null; // grid size right before the prompt being sent
 let completedSrcs = new Set();
 
 async function workerLoop() {
@@ -736,6 +738,8 @@ async function workerLoop() {
   stopRequested = false;
   lastStateKey = "";
   inFlight = [];
+  submitted = [];
+  cardCountBefore = null;
   completedSrcs = imageSrcs();
   try {
     const activeProjects = await api("GET", "/api/projects");
@@ -765,7 +769,12 @@ async function workerLoop() {
       const isInputReady = input && isVisible(input) && inputText(input).length < 20;
       const pausing = await isPausing();
       const activeGenerating = countGeneratingCards();
-      const hasSlot = inFlight.length < maxConcurrency && activeGenerating < maxConcurrency;
+      // Test mode (side panel) overrides the configured session limit for this run only
+      const { testLimit } = await chrome.storage.local.get("testLimit");
+      const sessionLimit = testLimit > 0 ? testLimit : cfg.session_limit_images;
+      // Prompts already sent count toward the limit: otherwise Flow keeps generating images nobody saves
+      const underLimit = !(sessionLimit > 0) || generated + inFlight.length < sessionLimit;
+      const hasSlot = underLimit && inFlight.length < maxConcurrency && activeGenerating < maxConcurrency;
 
       // 1. SUBMIT NEXT PROMPT ONLY IF NOT PAUSING AND UNDER CONCURRENCY LIMIT
       if (!pausing && hasSlot && isInputReady) {
@@ -815,25 +824,14 @@ async function workerLoop() {
               await sleep(beforeSendMs);
               checkStopped();
               step("mengirim prompt…");
-              const cardsBefore = new Set(getAllCards());
+              cardCountBefore = getAllCards().length;
               await submitPrompt(input);
-              // Flow mounts the new card at index 0 of the grid: tag it with this scene's index
-              let taggedCard = null;
-              const tagDeadline = Date.now() + 3500;
-              while (Date.now() < tagDeadline) {
-                const currentCards = getAllCards();
-                taggedCard = currentCards.find((c) => !cardsBefore.has(c));
-                if (!taggedCard && currentCards.length > 0 && !currentCards[0].hasAttribute("data-stickman-scene")) {
-                  taggedCard = currentCards[0];
-                }
-                if (taggedCard) break;
-                await sleep(150);
-              }
-              if (taggedCard) {
-                taggedCard.setAttribute("data-stickman-scene", String(job.scene_index));
-                taggedCard.setAttribute("data-stickman-project", job.project_id);
-              }
-              inFlight.push({ job, submittedAt: Date.now(), card: taggedCard });
+              // Wait for Flow to mount the new card so grid positions line up with `submitted`
+              await waitFor(() => getAllCards().length > cardCountBefore, 3500);
+              cardCountBefore = null;
+              const target = { job, submittedAt: Date.now() };
+              submitted.push(target);
+              inFlight.push(target);
               log(`Scene ${job.scene_index + 1}/${job.total} terkirim! (${inFlight.length}/${maxConcurrency} sedang diproses)`, "ok");
               setState("job", `${inFlight.length} gambar sedang diproses Flow secara paralel…`);
               // Breathing room after submitting so Flow mounts the new card cleanly before next paste
@@ -841,6 +839,9 @@ async function workerLoop() {
               await sleep(interPromptMs);
               continue; // check immediately if another slot can be submitted!
             } catch (e) {
+              // A card that Flow mounted anyway still takes a grid slot: keep positions aligned
+              if (cardCountBefore != null && getAllCards().length > cardCountBefore) submitted.push(null);
+              cardCountBefore = null;
               if (e instanceof WorkerStopped) throw e;
               log(`${currentJob.label} gagal kirim prompt: ${e.message}`, "error");
               await api("POST", `/api/jobs/${job.project_id}/${job.scene_index}/release`).catch(() => {});
@@ -854,129 +855,113 @@ async function workerLoop() {
       // 2. CHECK FOR COMPLETED IMAGES FROM IN-FLIGHT GENERATIONS
       if (inFlight.length > 0) {
         const oldest = inFlight[0];
-        const elapsed = Date.now() - oldest.submittedAt;
+        const freshImgs = [...document.images].filter((img) => {
+          const src = img.currentSrc || img.src;
+          return (
+            src &&
+            !completedSrcs.has(src) &&
+            img.complete &&
+            Math.max(img.naturalWidth, img.naturalHeight) >= SELECTORS.minImageSize &&
+            isVisible(img) &&
+            !isTileGenerating(img)
+          );
+        });
 
-        // Flow generation takes at least 7 seconds. Ignore too-early checks to prevent matching old DOM images.
-        if (elapsed >= 7000) {
-          const freshImgs = [...document.images].filter((img) => {
-            const src = img.currentSrc || img.src;
-            return (
-              src &&
-              !completedSrcs.has(src) &&
-              img.complete &&
-              Math.max(img.naturalWidth, img.naturalHeight) >= SELECTORS.minImageSize &&
-              isVisible(img) &&
-              !isTileGenerating(img)
-            );
-          });
+        // Flow shows the newest card first and reuses card DOM nodes when a new one is added,
+        // so a card's content is identified by its grid position, not by the node:
+        // position p (0 = top) holds the p-th most recent prompt submitted from this tab.
+        const allGridCards = getAllCards();
+        let target = null;
+        let freshImg = null;
+        for (const img of freshImgs) {
+          const card = findTileCard(img);
+          let pos = allGridCards.indexOf(card);
+          if (pos === -1) pos = allGridCards.indexOf(card?.parentElement);
+          if (pos === -1 || pos >= submitted.length) continue;
+          const candidate = submitted[submitted.length - 1 - pos];
+          // Flow takes at least 7 seconds: an "image" earlier than that is a stale DOM leftover
+          if (candidate && inFlight.includes(candidate) && Date.now() - candidate.submittedAt >= 7000) {
+            target = candidate;
+            freshImg = img;
+            break;
+          }
+        }
 
-          if (freshImgs.length > 0) {
-            let targetIdx = -1;
-            let imgIdx = -1;
+        if (target) {
+          inFlight.splice(inFlight.indexOf(target), 1);
+          const job = target.job;
+          const src = freshImg.currentSrc || freshImg.src;
+          completedSrcs.add(src);
 
-            // 1. Exact match via data-stickman-scene attribute tag on the card
-            for (let i = 0; i < freshImgs.length; i++) {
-              const img = freshImgs[i];
-              const card = findTileCard(img);
-              const tagged = card?.getAttribute("data-stickman-scene") || card?.closest("[data-stickman-scene]")?.getAttribute("data-stickman-scene");
-              if (tagged != null) {
-                const matchInFlight = inFlight.findIndex((t) => String(t.job.scene_index) === tagged);
-                if (matchInFlight !== -1) {
-                  targetIdx = matchInFlight;
-                  imgIdx = i;
-                  break;
-                }
-              }
+          // Mark other image elements that belong to this same card/tile as completed too
+          for (const other of freshImgs) {
+            if (other === freshImg || isSameCard(other, freshImg)) {
+              const s = other.currentSrc || other.src;
+              if (s) completedSrcs.add(s);
             }
+          }
 
-            // 2. Relative position matching in grid (Flow prepends newest card at pos 0; higher pos = older submitted job)
-            if (targetIdx === -1) {
-              const allGridCards = getAllCards();
-              const scored = freshImgs.map((img, idx) => {
-                const card = findTileCard(img);
-                const pos = allGridCards.indexOf(card) !== -1 ? allGridCards.indexOf(card) : allGridCards.indexOf(card?.parentElement);
-                return { img, idx, pos };
-              });
-              scored.sort((a, b) => b.pos - a.pos);
-              targetIdx = 0; // oldest in-flight job
-              imgIdx = scored[0].idx; // oldest card in grid
-            }
+          currentJob = {
+            label: `Scene ${job.scene_index + 1}/${job.total}`,
+            project: job.project_title || job.project_id,
+            scene: job.scene_index + 1,
+            total: job.total,
+            kind: "generate",
+            startedAt: target.submittedAt,
+          };
 
-            const [target] = inFlight.splice(targetIdx, 1);
-            const job = target.job;
-            const freshImg = freshImgs[imgIdx];
-            const src = freshImg.currentSrc || freshImg.src;
-            completedSrcs.add(src);
+          const path = `/api/jobs/${job.project_id}/${job.scene_index}`;
+          const isImmediate = cfg.download_mode === "immediate";
 
-            // Mark other image elements that belong to this same card/tile as completed too
-            for (const other of freshImgs) {
-              if (other === freshImg || isSameCard(other, freshImg)) {
-                const s = other.currentSrc || other.src;
-                if (s) completedSrcs.add(s);
-              }
-            }
-
-            currentJob = {
-              label: `Scene ${job.scene_index + 1}/${job.total}`,
-              project: job.project_title || job.project_id,
-              scene: job.scene_index + 1,
-              total: job.total,
-              kind: "generate",
-              startedAt: target.submittedAt,
-            };
-
-            const path = `/api/jobs/${job.project_id}/${job.scene_index}`;
-            const isImmediate = cfg.download_mode === "immediate";
-
-            if (isImmediate && cfg.resolution !== "thumbnail") {
-              // Immediate mode: download directly via menu per scene
-              step(`download ${cfg.resolution}…`);
-              let note = null;
-              try {
-                const file = await downloadViaMenu(src, job, cfg.resolution);
-                await api("POST", `${path}/result-file`, { path: file });
-              } catch (e) {
-                if (e instanceof WorkerStopped) throw e;
-                note = `resolusi rendah: download ${cfg.resolution} gagal: ${e.message}`;
-                try {
-                  const image = await grabImage(src, freshImg);
-                  await api("POST", `${path}/result`, { image_base64: image.base64, mime: image.mime, flow_src: src, note });
-                } catch (err) {
-                  log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
-                  await api("POST", `${path}/fail`, { error: err.message }).catch(() => {});
-                }
-              }
-            } else {
-              // Batch-end mode (or thumbnail): grab image instantly (<200ms) without menu clicks
-              step(cfg.resolution === "1K" ? "menyimpan 1K instan…" : "menyimpan pratinjau…");
+          if (isImmediate && cfg.resolution !== "thumbnail") {
+            // Immediate mode: download directly via menu per scene
+            step(`download ${cfg.resolution}…`);
+            let note = null;
+            try {
+              const file = await downloadViaMenu(src, job, cfg.resolution);
+              await api("POST", `${path}/result-file`, { path: file });
+            } catch (e) {
+              if (e instanceof WorkerStopped) throw e;
+              note = `resolusi rendah: download ${cfg.resolution} gagal: ${e.message}`;
               try {
                 const image = await grabImage(src, freshImg);
-                await api("POST", `${path}/result`, {
-                  image_base64: image.base64,
-                  mime: image.mime,
-                  flow_src: src,
-                  note: cfg.resolution === "1K" ? "1K asli" : "pratinjau siap 2K",
-                });
+                await api("POST", `${path}/result`, { image_base64: image.base64, mime: image.mime, flow_src: src, note });
               } catch (err) {
                 log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
                 await api("POST", `${path}/fail`, { error: err.message }).catch(() => {});
               }
             }
-
-            const secs = Math.round((Date.now() - target.submittedAt) / 1000);
-            log(`${currentJob.label} tersimpan ✓ · ${secs} dtk (${inFlight.length} masih berjalan)`, "ok");
-            failStreak = 0;
-            generated += 1;
-            await notifyIfProjectDone(cfg, job.project_id);
-            currentJob = null;
-            if (cfg.session_limit_images > 0 && generated >= cfg.session_limit_images) {
-              log(`Batas sesi tercapai (${generated} gambar). Worker dimatikan otomatis.`, "ok");
-              notify(cfg, "Batas sesi tercapai", `${generated} gambar selesai dibuat. Worker OFF otomatis.`, job.project_id);
-              await chrome.storage.local.set({ enabled: false });
-              break;
+          } else {
+            // Batch-end mode (or thumbnail): grab image instantly (<200ms) without menu clicks
+            step(cfg.resolution === "1K" ? "menyimpan 1K instan…" : "menyimpan pratinjau…");
+            try {
+              const image = await grabImage(src, freshImg);
+              await api("POST", `${path}/result`, {
+                image_base64: image.base64,
+                mime: image.mime,
+                flow_src: src,
+                // the app reads the real resolution from the file, so 1K needs no note
+                note: cfg.resolution === "1K" ? null : "pratinjau siap 2K",
+              });
+            } catch (err) {
+              log(`${currentJob.label} gagal simpan: ${err.message}`, "error");
+              await api("POST", `${path}/fail`, { error: err.message }).catch(() => {});
             }
-            continue;
           }
+
+          const secs = Math.round((Date.now() - target.submittedAt) / 1000);
+          log(`${currentJob.label} tersimpan ✓ · ${secs} dtk (${inFlight.length} masih berjalan)`, "ok");
+          failStreak = 0;
+          generated += 1;
+          await notifyIfProjectDone(cfg, job.project_id);
+          currentJob = null;
+          if (sessionLimit > 0 && generated >= sessionLimit) {
+            log(`Batas sesi tercapai (${generated} gambar). Worker dimatikan otomatis.`, "ok");
+            notify(cfg, "Batas sesi tercapai", `${generated} gambar selesai dibuat. Worker OFF otomatis.`, job.project_id);
+            await chrome.storage.local.set({ enabled: false });
+            break;
+          }
+          continue;
         }
 
         // Check if oldest in-flight job timed out
@@ -1020,7 +1005,7 @@ async function workerLoop() {
     }
     inFlight = [];
     await send({ type: "detach" }).catch(() => {});
-    await chrome.storage.local.set({ pausing: false });
+    await chrome.storage.local.set({ pausing: false, testLimit: 0 });
     chrome.storage.local.set({ worker: { state: "off", label: "Worker OFF", since: Date.now() } });
     log("Worker OFF");
   }
